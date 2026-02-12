@@ -2,12 +2,12 @@
 #define __MAIN_H__
 
 #define font_ttf "/usr/share/fonts/TTF/Hack-BoldItalic.ttf" //Arch
-#define FILE_RECTCOORD "./logs/rectcoord.txt"
-#define FILE_RECTCOORDDATETIME "./logs/rectcoorddatetime.txt"
-#define FILE_RECTCOORDALERTMESSAGE "./logs/rectcoordalertmessage.txt"
+#define FILE_RECTCOORD "./coordinate/rectcoord.txt"
+#define FILE_RECTCOORDDATETIME "./coordinate/rectcoorddatetime.txt"
+#define FILE_RECTCOORDALERTMESSAGE "./coordinate/rectcoordalertmessage.txt"
 #define file_allertmessage "./logs/alert_message.txt"
 #define FILE_MODBUS "./logs/readModbus6.txt"
-#define FILE_IMAGE "./logs/typeImage.txt"
+#define FILE_IMAGE "./coordinate/typeImage.txt"
 #define IMAGE_CLOCKFON "./image/clock_fon.png"
 
 
