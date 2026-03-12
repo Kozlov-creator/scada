@@ -19,6 +19,14 @@
 
 using asio::ip::udp;
 
+
+
+asio::io_context io_context;
+udp::socket global_socket(io_context, udp::endpoint(udp::v4(), 1234));
+
+
+
+
 // Глобальное хранилище координат
 // 2. ОБЪЕКТЫ: Описание элементов на экране
 struct ScadaElement {
@@ -71,9 +79,39 @@ struct NetContext {
 };
 
 
+
 void save_layout_config(const std::string& file_name);
 void InputCoord();
 
+//-----------------------------------------------------------------------------
+// Аргументы: IP адрес МК, порт МК, порт ПК (исходящий), массив данных, длина данных
+void udp_send_data(const std::string& dst_ip, uint16_t dst_port, uint16_t src_port, uint8_t* data, uint16_t len) {
+	try {
+		asio::ip::udp::endpoint remote_endpoint(asio::ip::make_address(dst_ip), dst_port);
+
+		// Отправляем данные через наш основной сокет
+		// global_socket должен быть доступен здесь (сделайте его extern или передайте ссылкой)
+		global_socket.send_to(asio::buffer(data, len), remote_endpoint);
+
+		// std::cout << "Команда отправлена на " << dst_ip << ":" << dst_port << std::endl;
+	} catch (std::exception& e) {
+		std::cerr << "Ошибка отправки UDP: " << e.what() << std::endl;
+	}
+}
+
+//-----------------------------------------------------------------------------
+//Добавляем функцию отправки команды
+void send_mcu_command(std::string objName, uint8_t cmd) {
+	// Формируем пакет. Например: [ID_ОБЪЕКТА, КОМАНДА]
+	// Для простоты отправим 1 байт: 1 - ПУСК, 0 - СТОП
+	uint8_t packet[1] = { cmd };
+
+	// IP адрес берем из remote_endpoint (из сетевого потока)
+	// или задаем статически (ipaddr_pc)
+	udp_send_data("192.168.1.197", 1235, 1234, packet, 1);
+
+	std::cout << "UDP Command Sent: " << (int)cmd << " to " << objName << std::endl;
+}
 //-----------------------------------------------------------------------------
 //Функция сетевого потока (UDP-клиент) Эта функция будет постоянно слушать сеть.
 int network_thread_func(void* ptr) {
@@ -136,14 +174,10 @@ int main( int argc, char *args[] )
 	SDL_FPoint mousePos;
 	SDL_Point clickOffset;
 
-	asio::io_context io_context;
-	udp::socket global_socket(io_context, udp::endpoint(udp::v4(), 1234));
-
 	NetContext nCtx;
 	nCtx.socket = &global_socket;
 	nCtx.quitFlag = &net_quit;
 	nCtx.mutex = data_mutex;
-
 	InputCoord();
 
 	bool leftMouseButtonDown = false;
@@ -305,13 +339,17 @@ int main( int argc, char *args[] )
 							// Проверяем кнопки ПУСК/СТОП/ЗАКРЫТЬ
 							SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
 							SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
+							SDL_FRect btnOff = { controlWindowRect.x + 300, controlWindowRect.y + 150, 150, 80 };
 
 							if (SDL_PointInRectFloat(&mousePos, &btnClose)) {
 								showControlWindow = false;
 							}
+							else if (SDL_PointInRectFloat(&mousePos, &btnOff)) {
+								send_mcu_command(activeControlObject, 0); // Команда СТОП
+							}
 							else if (SDL_PointInRectFloat(&mousePos, &btnOn)) {
 								std::cout << "ОТПРАВЛЯЕМ UDP КОМАНДУ ВКЛ ДЛЯ: " << activeControlObject << std::endl;
-								// Здесь ваш udp_send_data(...);
+								 send_mcu_command(activeControlObject, 1); // Команда ПУСК// Здесь ваш udp_send_data(...);
 							}
 							break; // Важно: не даем клику пройти к объектам на фоне!
 						}
