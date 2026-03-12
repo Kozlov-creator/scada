@@ -1,3 +1,4 @@
+#include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string>
 #include <main.h>
@@ -5,6 +6,15 @@
 #include <fstream>
 #include <iostream>
 #include <sstream> // Для std::istringstream
+#include <algorithm>
+
+
+// Статический массив месяцев (быстрее чем switch)
+static const std::string MONTHS[] = {
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+};
+
 
 
 std::vector<std::string> strv;
@@ -13,10 +23,11 @@ extern std::vector<std::string> vstrDate;
 extern std::vector<std::string> vstrValue;
 extern std::vector<std::string> vstrAlert;
 
+// Глобальные данные для обмена между потоками
+extern SDL_Mutex* modbus_mutex;
 
-
-
-
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
 std::ifstream open_file(std::string file_name, std::string sData)
 {
     std::ifstream in;
@@ -32,252 +43,130 @@ std::ifstream open_file(std::string file_name, std::string sData)
     in.close();
     return in;
 }
-
-
-void read_modbus(std::string& file_name) // file_name по const reference
+//---------------------------------------------------------------------------------
+//Безопасная версия read_modbus
+void read_modbus(const std::string& file_name)
 {
-int findsym = 0;
-int count = 0;
-std::string sline;
-
-std::ifstream openfile(file_name);
-
-if (!openfile.is_open()) {
-    std::cerr << "Не удалось открыть файл: " << file_name << std::endl;
-    return; // Выходим, если не удалось открыть файл
-}
-
-
-    vstrDate.clear();
-     std::cout << "vstrDate size = " << vstrDate.size() << std::endl;
-    //vstrDate.reserve(10); // Предварительное выделение памяти
-    vstrValue.clear();
-    //vstrValue.reserve(10); // Предварительное выделение памяти
-
-int xy = 0, yx = 0;
-
-    while (std::getline(openfile, sline)) { // Читаем файл построчно
-
-         std::istringstream iss(sline); // Создаем поток из строки
-         std::string registerNumber, value, stringTemp;
-         if (std::getline(iss, registerNumber, ':') && std::getline(iss, value)) { // Разделяем строку на registerNumber и value
-             // Удаляем лишние пробелы в начале и конце value и registerNumber
-             size_t first = value.find_first_not_of(' ');
-             size_t last = value.find_last_not_of(' ');
-             value = value.substr(first, (last - first + 1));
-             first = registerNumber.find_first_not_of(' ');
-             last = registerNumber.find_last_not_of(' ');
-             registerNumber = registerNumber.substr(first, (last - first + 1));
-
-             if (registerNumber == "7793")
-             {
-                 size_t findsym = value.find('.');
-                 if (findsym != std::string::npos) {
-                     value.erase(findsym, 7); // Удаляем дробную часть
-                 }
-
-                stringTemp = value.substr(0,2);
-                vstrDate.push_back(stringTemp); //день
-                stringTemp = value.substr(2,2);
-                int month = std::stoi(stringTemp); // Преобразуем в число
-                switch (month) {
-                    case 1:
-                        stringTemp = "января";
-                        break;
-                    case 2:
-                        stringTemp = "февраля";
-                        break;
-                    case 3:
-                        stringTemp = "марта";
-                        break;
-                    case 4:
-                        stringTemp = "апреля";
-                        break;
-                    case 5:
-                        stringTemp = "мая";
-                        break;
-                    case 6:
-                        stringTemp = "июня";
-                        break;
-                    case 7:
-                        stringTemp = "июля";
-                        break;
-                    case 8:
-                        stringTemp = "августа";
-                        break;
-                    case 9:
-                        stringTemp = "сентября";
-                        break;
-                    case 10:
-                        stringTemp = "октября";
-                        break;
-                    case 11:
-                        stringTemp = "ноября";
-                        break;
-                    case 12:
-                        stringTemp = "декабря";
-                        break;
-                    default:
-                        stringTemp = "default";
-                }
-                vstrDate.push_back(stringTemp);//месяц
-                 stringTemp = value.substr(4,2);
-                 vstrDate.push_back(stringTemp);//год
-yx++;
-             }
-
-             if (registerNumber == "7794")
-             {
-                 size_t findsym = value.find('.');
-                 if (findsym != std::string::npos) {
-                     value.erase(findsym, 7); // Удаляем дробную часть
-                 }
-                 std::cout << "value.length() = " << value.length() << std::endl;
-
-                 if (value.length()==6)
-                 {  stringTemp = value.substr(0,2);
-                    stringTemp += ":";
-                    vstrDate.push_back(stringTemp);
-                    stringTemp = value.substr(2,2);
-                    stringTemp += ":";
-                    vstrDate.push_back(stringTemp);
-                    stringTemp = value.substr(4,2);
-                    vstrDate.push_back(stringTemp);
-                }
-                 else
-                 {
-                    value.insert(0, "0");
-                    stringTemp = value.substr(0,2);
-                    stringTemp += ":";
-                    vstrDate.push_back(stringTemp);
-                    stringTemp = value.substr(2,2);
-                    stringTemp += ":";
-                    vstrDate.push_back(stringTemp);
-                    stringTemp = value.substr(4,2);
-                    vstrDate.push_back(stringTemp);
-                }}
-
-
-                     else {
-                         vstrValue.push_back(registerNumber + " " + value); xy++;}
-
-                         std::cout << "value dataread vstrDate = " << vstrDate.at(yx-1) << std::endl;
-std::cout << "value dataread = " << vstrValue.at(xy-1) << std::endl;
-
-/*////IMC------------------------------------------------------------------------------------------------
-             if (registerNumber == "7001" || registerNumber == "7002" || registerNumber == "7003" ||
-                 registerNumber == "7004" || registerNumber == "7005" || registerNumber == "7006")
-             {
-                 size_t findsym = value.find('.');
-
-             if (findsym != std::string::npos) {
-                 value.erase(findsym, 7); // Удаляем дробную часть
-                 }
-
-             if (value.size() == 1) {
-                 value.insert(0, "0");
-             }
-             if (registerNumber == "7004" || registerNumber == "7005") {
-                 value += ":";}
-
-             if (registerNumber == "7003") {
-                 int month = std::stoi(value); // Преобразуем в число
-                 switch (month) {
-                     case 1:
-                         value = "января";
-                         break;
-                     case 2:
-                         value = "февраля";
-                         break;
-                     case 3:
-                         value = "марта";
-                         break;
-                     case 4:
-                         value = "апреля";
-                         break;
-                     case 5:
-                         value = "мая";
-                         break;
-                     case 6:
-                         value = "июня";
-                         break;
-                     case 7:
-                         value = "июля";
-                         break;
-                     case 8:
-                         value = "августа";
-                         break;
-                     case 9:
-                         value = "сентября";
-                         break;
-                     case 10:
-                         value = "октября";
-                         break;
-                     case 11:
-                         value = "ноября";
-                         break;
-                     case 12:
-                         value = "декабря";
-                         break;
-                     default:
-                         value = "default";
-                 }
-             }
-             vstrDate.push_back(value);
-                 } else {
-                     vstrValue.push_back(registerNumber + " " + value);
-                }*/
-////end IMC-------------------------------------------------------------------------------------------
-         }
+    std::ifstream openfile(file_name);
+    if (!openfile.is_open()) {
+        // Не спамим в консоль каждый кадр, если файла нет
+        return;
     }
-    std::cout << "dataread while end" << std::endl;
-openfile.close();
 
+    // Временные векторы, чтобы не блокировать основной поток надолго
+    std::vector<std::string> tempDate;
+    std::vector<std::string> tempValue;
+    std::string sline;
+
+    while (std::getline(openfile, sline)) {
+        if (sline.empty()) continue;
+
+        std::istringstream iss(sline);
+        std::string regNum, value;
+
+        if (std::getline(iss, regNum, ':') && std::getline(iss, value)) {
+            // Trim (очистка пробелов)
+            auto trim = [](std::string& s) {
+                s.erase(0, s.find_first_not_of(" \t\r\n"));
+                s.erase(s.find_last_not_of(" \t\r\n") + 1);
+            };
+            trim(regNum);
+            trim(value);
+
+            // Обработка даты (Регистр 7793)
+            if (regNum == "7793" && value.length() >= 6) {
+                // День
+                tempDate.push_back(value.substr(0, 2));
+
+                // Месяц
+                try {
+                    int monthIdx = std::stoi(value.substr(2, 2));
+                    if (monthIdx >= 1 && monthIdx <= 12) {
+                        tempDate.push_back(MONTHS[monthIdx - 1]);
+                    } else {
+                        tempDate.push_back("unknown");
+                    }
+                } catch (...) { tempDate.push_back("error"); }
+
+                // Год
+                tempDate.push_back(value.substr(4, 2));
+            }
+            // Обработка времени (Регистр 7794)
+            else if (regNum == "7794") {
+                if (value.find('.') != std::string::npos) {
+                    value = value.substr(0, value.find('.')); // Отрезаем дробную часть
+                }
+
+                if (value.length() < 6) value.insert(0, 6 - value.length(), '0');
+
+                tempDate.push_back(value.substr(0, 2) + ":");
+                tempDate.push_back(value.substr(2, 2) + ":");
+                tempDate.push_back(value.substr(4, 2));
+            }
+            // Все остальные регистры
+            else {///Ограничение размера векторов. Чтобы векторы не росли бесконечно (например, если файл Modbus стал огромным или произошла ошибка дублирования), добавим жесткий лимит
+                if (tempValue.size() < 50) {
+                    tempValue.push_back(regNum + " " + value);
+                } else {
+                    // Если нужно удалять старые и добавлять новые (FIFO):
+                    // tempValue.erase(tempValue.begin());
+                    // tempValue.push_back(regNum + " " + value);
+                    break; // Или просто перестаем читать, если данных слишком много
+                }
+               }
+        }
+    }
+    openfile.close();
+
+    // КРИТИЧЕСКИЙ УЧАСТОК: Обновляем глобальные векторы под мьютексом
+    if (modbus_mutex != nullptr) {
+        SDL_LockMutex(modbus_mutex);
+        vstrDate = std::move(tempDate);   // move эффективнее копирования
+        vstrValue = std::move(tempValue);
+        SDL_UnlockMutex(modbus_mutex);
+    }
 }
-
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 int read_alert(std::string file_name)
-{
-    std::ifstream openfile;
-    int numLinesToRead = 4; // Количество строк для чтения с конца
+{ std::ifstream openfile(file_name, std::ios::binary | std::ios::ate);
+    if (!openfile.is_open()) return 1;
+
+    int numLinesToRead = 4;
     int linesRead = 0;
     std::string line;
+    std::vector<std::string> tempAlerts;
 
+    long position = openfile.tellg();
+    long fileSize = position;
 
-    openfile.open(file_name);
-    if (!openfile.is_open()) {
-        std::cerr << "Не удалось открыть файл: " << file_name << std::endl;
-        return 1;
+    while (position > 0 && linesRead < numLinesToRead) {
+        position--;
+        openfile.seekg(position);
+
+        // Нашли начало строки или начало файла
+        if ((openfile.peek() == '\n' || position == 0) && position + 1 != fileSize) {
+            long currentPos = openfile.tellg();
+
+            if (position == 0) openfile.seekg(0);
+            else openfile.seekg(position + 1);
+
+            if (std::getline(openfile, line)) {
+                if (!line.empty()) {
+                    tempAlerts.push_back(line);
+                    linesRead++;
+                }
+            }
+            // Возвращаемся на позицию поиска, чтобы не зациклиться
+            openfile.seekg(currentPos);
+        }
     }
 
-    int fileSize = getFileSize(openfile);
-    int position = fileSize;
+    // ВАЖНО: т.к. мы читали с конца, самая новая строка — первая в векторе.
+    // Если нужно, чтобы порядок был хронологический (старые сверху),
+    // можно перевернуть вектор: std::reverse(tempAlerts.begin(), tempAlerts.end());
 
-    //vstrAlert.clear();
-    vstrAlert.resize(0);
-    vstrAlert.shrink_to_fit();
-        // Читаем файл с конца, пока не прочитаем нужное количество строк или не достигнем начала файла
-        while (position > 0 && linesRead < numLinesToRead) {
-            // Ищем предыдущий символ новой строки
-            position--;
-            openfile.seekg(position);
-
-            if ((openfile.peek() == '\n' || position == 0) && position+1 != fileSize) {
-
-                // Если нашли новую строку или достигли начала файла, читаем строку
-                if (position == 0) {
-                    openfile.seekg(0); // Если начало файла, читаем с начала
-                } else {
-                    openfile.seekg(position + 1); // Если нашли новую строку, читаем после неё
-                }
-
-                getline(openfile, line);
-
-                vstrAlert.push_back(line);
-
-                linesRead++;
-            }
-        }
-
+    vstrAlert = std::move(tempAlerts); // Теперь это корректный перенос данных
     openfile.close();
     return 0;
 }

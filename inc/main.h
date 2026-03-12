@@ -9,13 +9,14 @@
 #define FILE_MODBUS "./logs/readModbus6.txt"
 #define FILE_IMAGE "./coordinate/typeImage.txt"
 #define IMAGE_CLOCKFON "./image/clock_fon.png"
+#define IMAGES_CONF "./coordinate/images.conf"
 
 
 
 int threadFunction(void*);
 
 std::ifstream open_file(std::string, std::string);
-void read_modbus(std::string&);
+void read_modbus(const std::string&);
 int getFileSize(std::ifstream &);
 int read_alert(std::string);
 

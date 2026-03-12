@@ -1,3 +1,4 @@
+#include <map>
 #include <fstream>
 #include <iostream>
 #include <SDL3/SDL.h>
@@ -7,6 +8,44 @@
 #include <string>
 #include <main.h>
 #include <chrono>
+#include "data_struct.h" //  структура с сенсорами
+
+
+// Глобальное хранилище координат
+
+// 1. Хранилище уникальных текстур (Путь к файлу -> Объект класса)
+extern std::map<std::string, CTexture> gSharedTextures;
+
+// Хранилище всех текстур проекта
+extern std::map<std::string, CTexture> gSceneTextures;
+// Глобальное хранилище координат
+// 2. ОБЪЕКТЫ: Описание элементов на экране
+struct ScadaElement {
+    std::string textureKey; // Имя текстуры из gSharedTextures
+    SDL_FRect rect;         // Координаты на экране
+};
+
+struct MKElement {
+    std::string textureKey; // Имя текстуры из gSharedTextures
+    SDL_FRect rect;         // Координаты на экране
+};
+
+// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
+extern std::map<std::string, ScadaElement> gSceneElements;
+extern std::map<std::string, SDL_FRect> gTextConfig;
+extern std::map<std::string, SDL_FRect> gTextAlert;
+// Глобальные данные для обмена между потоками
+extern SensorData shared_sensor_data;
+extern SDL_Mutex* data_mutex;
+extern SDL_Mutex* modbus_mutex;
+
+//Подготовка глобальных контейнеров
+extern std::vector<CTexture> vValueTextures;
+// Кэш текстур для даты/времени (vstrDate)
+extern std::vector<CTexture> vDateTextures;
+// Последние отрисованные строки (для сравнения)
+extern std::vector<std::string> vLastValueStrings;
+extern std::vector<std::string> vLastDateStrings;
 
 class TimingUtil
 {
@@ -28,6 +67,7 @@ private:
     std::string message_;
 };
 
+
 ///////////////////////////////////////////////////////////////////////
 
 extern SDL_Renderer *gRenderer;
@@ -39,11 +79,12 @@ extern std::vector<SDL_FRect> vRectClipValue;
 
 std::vector<std::string> vstrDate;
 std::vector<std::string> vstrValue;
+extern std::vector<std::string> vstrValueMC;
 std::vector<std::string> vstrImage;
 std::vector<std::string> vstrAlert;
 
 std::vector<SDL_Texture*> vDateTimeTextures;
-std::vector<SDL_Texture*> vValueTextures;
+//std::vector<SDL_Texture*> vValueTextures;
 std::vector<SDL_Texture*> vMessageTextures;
 
 
@@ -64,73 +105,128 @@ CTexture tempCTexture;
 
 SDL_Color sdlcolor;
 
+
+void read_image_config(const std::string);
 /////////////////////////////////////////////////////////////////////
 
-void desctop1()
-{
-    //TimingUtil t("My test");
-//------------------------------------------------------------------------//
-                    //Очистить экран рендера
-				SDL_SetRenderDrawColor( gRenderer, 129, 191, 254, 0xFF ); //8DCAFF 8E88E1 00b3ff Цвет фона
-                SDL_RenderClear( gRenderer ); //Очистить текущую цель рендеринга с помощью цвета рисования.
-//------------------------------------------------------------------------//
-                tempCTexture.loadFromFile(IMAGE_CLOCKFON);
-                tempCTexture.setXY(1490, 10);
-                tempCTexture.render(1,NULL,NULL, 0, NULL, SDL_FLIP_NONE);
-//------------------------------------------------------------------------//
+/*void render_alerts() {
+    sdlcolor = {0xFF, 0xFF, 0xFF, 0xFF}; // Белый текст для алертов
 
-                MessageRect.x=1;
-                MessageRect.y=900;
-                MessageRect.w=1910;
-                MessageRect.h=175;
+    for (size_t i = 0; i < vstrAlert.size(); i++) {
+        // Формируем имя ключа: alert_line_0, alert_line_1...
+        std::string key = "alert_line_" + std::to_string(i);
 
-                SDL_SetRenderDrawColor(gRenderer,0x76,0x70,0x70,0xFF); //Цвет фона
-                SDL_RenderFillRect(gRenderer, &MessageRect);
-                SDL_RenderRect(gRenderer, &MessageRect);//рисуем квадрат заданным цветом
+        // Проверяем, есть ли такая область в конфиге
+        if (gImageConfig.count(key)) {
+            // Умная отрисовка: используем кэш текстур для алертов (если создали его ранее)
+            // или обычную отрисовку:
+            tempCTexture.loadFromRenderedText(vstrAlert[i], sdlcolor);
+            tempCTexture.render(0, &gImageConfig[key], NULL, 0, NULL, SDL_FLIP_NONE);
+        }
+    }
+}*/
 
-/////////////////////////////////////////////////////////////////////////////
 
-                sdlcolor={0x0a,0x0b,0x0c,0xff};
-                for (int i = 0; i < vstrAlert.size(); i++) {
-                    tempCTexture.loadFromRenderedText(vstrAlert.at(i), sdlcolor);
-                    tempCTexture.render(0,&vRectClipCoordAlertMessage.at(i),NULL, 0, NULL, SDL_FLIP_NONE);
-                 }
+/*void render_images() {
+    sdlcolor = {0xFF, 0xFF, 0xFF, 0xFF}; // Белый текст для алертов
 
-//------------------------------------------------------------------------//
-std::cout << "desctop1 vstrDate begin" << std::endl;
-std::string snameFile = FILE_MODBUS;
-read_modbus(snameFile);
-                sdlcolor={0x0a,0x0b,0x0c,0xff};
-                for (int i = 0; i < vstrDate.size(); i++) {
-                     tempCTexture.loadFromRenderedText(vstrDate.at(i), sdlcolor);
-                     tempCTexture.render(0,&vRectClipCoordDateTime.at(i),NULL, 0, NULL, SDL_FLIP_NONE);
-                }
-                std::cout << "desctop1 vstrDate end" << std::endl;
-//------------------------------------------------------------------------//
+    for (size_t i = 0; i < vstrImage.size(); i++) {
+        // Формируем имя ключа: alert_line_0, alert_line_1...
+        std::string key = "clock_fon" + std::to_string(i);
 
-                sdlcolor={0xa0,0xb0,0xc0,0xFF};
-                for (int i = 0; i < 4; i++) {
-                    tempCTexture.loadFromRenderedText(vstrValue.at(i), sdlcolor);
-                    tempCTexture.render(0,&vRectClipValue.at(i),NULL, 0, NULL, SDL_FLIP_NONE);
-                }
+        // Проверяем, есть ли такая область в конфиге
+        if (gImageConfig.count(key)) {
+            // Умная отрисовка: используем кэш текстур для алертов (если создали его ранее)
+            // или обычную отрисовку:
+            tempCTexture.loadFromRenderedText(vstrImage[i], sdlcolor);
+            tempCTexture.render(0, &gImageConfig[key], NULL, 0, NULL, SDL_FLIP_NONE);
+        }
+    }
+}*/
 
-//-------------------------------------------------------------------------//
+/*void render_scada_objects() {
+    for (auto const& [name, rect] : gImageConfig) {
+        // Проверяем, есть ли такая текстура в нашем кэше (карта gSceneTextures)
+        if (gSceneTextures.count(name)) {
+            // Передаем указатель на rect из конфига прямо в ваш метод
+            gSceneTextures[name].render(0, const_cast<SDL_FRect*>(&rect), nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+        }
+    }
+}*/
+// Подготовка данных для вывода. Добавьте обновление вектора строк vstrValueMC данными из сетевой структуры. Это нужно делать до начала цикла отрисовки или внутри него, защитив мьютексом.
 
-                for (int i=0; i < vstrImage.size();i++)
-                {
-                    SDL_RenderTextureRotated(gRenderer,vimageTexture.at(i),NULL,&vRectClipCoord.at(i),0,NULL,SDL_FLIP_NONE);
-                }
-
-//-------------------------------------------------------------------------//
-                //Обновить экран
-               SDL_RenderPresent( gRenderer );
+void update_interface_values() {
+    SDL_LockMutex(data_mutex);
+    // Преобразуем сырые данные в строки для отображения
+    // Допустим, vstrValueMC[0] - температура, [1] - влажность и т.д.
+    vstrValueMC.at(0) = "Temp: " + std::to_string(shared_sensor_data.temperature) + " C";
+    vstrValueMC.at(1) = "Hum:  " + std::to_string(shared_sensor_data.humidity) + " %";
+    vstrValueMC.at(2) = "AccX: " + std::to_string(shared_sensor_data.accel_x);
+    vstrValueMC.at(3) = "ID:   " + std::to_string(shared_sensor_data.packet_id);
+    SDL_UnlockMutex(data_mutex);
 }
 
+/////////////////////////////////////////////////////////////////////
+void desctop1()
+{
+    // 1. Очистка экрана
+    SDL_SetRenderDrawColor(gRenderer, 129, 191, 254, 255);
+    SDL_RenderClear(gRenderer);
+
+    // 2. ОТРИСОВКА ГРАФИКИ (IMG:)
+    // Проходим по всем объектам из конфига
+    for (auto const& [objName, img] : gSceneElements) {
+        // Ключ для поиска текстуры — это имя файла из конфига
+        std::string texKey = img.textureKey;
+
+        if (gSharedTextures.count(texKey)) {
+            // Рисуем, передавая прямоугольник конкретного объекта
+            gSharedTextures[texKey].render(0, const_cast<SDL_FRect*>(&img.rect), nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+        }
+    }
+
+    // 3. ОТРИСОВКА ДАННЫХ МК (TXT:)
+    // Обновляем строки из сетевой структуры (под мьютексом)
+    update_interface_values();
+
+    sdlcolor = {255, 255, 255, 255}; // Белый для текста
+
+    // 2. ОТРИСОВКА ГРАФИКИ (IMG:)
+    // Проходим по всем объектам из конфига
+    int count=0;
+   for (auto const& [objName, rect] : gTextConfig) {
+              // Рисуем, передавая прямоугольник конкретного объекта
+            tempCTexture.loadFromRenderedText(vstrValueMC[count], sdlcolor);
+            tempCTexture.render(0, &gTextConfig[objName], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+            count++;
+    }
+
+    // Пример вывода температуры в конкретную зону из конфига
+   /* if (gTextConfig.count("temp_label")) {
+        // Берем уже готовую строку из vstrValueMC[0]
+        tempCTexture.loadFromRenderedText(vstrValueMC[0], sdlcolor);
+        tempCTexture.render(0, &gTextConfig["temp_label"], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+    }*/
+
+    // 4. ОТРИСОВКА АЛЕРТОВ (TXT:)
+    // Используем ваш метод render_alerts, но адаптированный под gTextAlert
+    for (size_t i = 0; i < vstrAlert.size(); i++) {
+        std::string key = "alert_line_" + std::to_string(i);
+        if (gTextAlert.count(key)) {
+            tempCTexture.loadFromRenderedText(vstrAlert[i], sdlcolor);
+            tempCTexture.render(0, &gTextAlert[key], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+        }
+    }
+
+    // 5. Вывод на экран
+    SDL_RenderPresent(gRenderer);
+}
+/////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void desctop2()
 {
-    std::string sstr {"sstr.cstr"};
+   /* std::string sstr {"sstr.cstr"};
     fonClockRect.x=1490;
     fonClockRect.y=5;
     fonClockRect.w=400;
@@ -161,5 +257,5 @@ void desctop2()
 
     //Обновить экран
     SDL_RenderPresent( gRenderer );
-     SDL_DestroyTexture(TestTexture);
+     SDL_DestroyTexture(TestTexture);*/
 };

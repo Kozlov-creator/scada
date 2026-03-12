@@ -1,3 +1,5 @@
+#include <unordered_map>
+#include <map>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -14,9 +16,25 @@
 #include <const_data.h>
 #include <main.h>
 
+// 1. РЕСУРСЫ: Уникальные текстуры (Ключ: "pump" -> Обьект CTexture с данными из файла pump.png)
+std::map<std::string, CTexture> gSharedTextures;
+
+// 2. ОБЪЕКТЫ: Описание элементов на экране
+struct ScadaElement {
+	std::string textureKey; // Имя текстуры из gSharedTextures
+	SDL_FRect rect;         // Координаты на экране
+};
+
+// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
+std::map<std::string, ScadaElement> gSceneElements;
+
+// 3. ТЕКСТ: Координаты текстовых полей
+extern std::map<std::string, SDL_FRect> gTextConfig;
+
 
 SDL_Surface *surfcursor = NULL;
 SDL_Cursor *mousecursor = NULL;
+std::vector<std::string> vstrValueMC;
 
 //Окно для рендеринга
 extern SDL_Window *gWindow;
@@ -26,11 +44,22 @@ extern SDL_Renderer *gRenderer;
 extern TTF_Font *gFont;
 extern SDL_Texture *ClockFon;
 //Scene textures
+// Глобальное хранилище текстур
+extern std::map<std::string, SDL_Texture*> gImageTexture;
+
 extern std::vector<SDL_Texture*> vimageTexture;
 extern std::vector<SDL_Texture*> vDateTimeTextures;
 extern std::vector<std::string> vstrImage;
-extern std::vector<SDL_FRect> vRectClipCoord;
+std::vector<SDL_FRect> vRectClipCoord;
 
+//Подготовка глобальных контейнеров
+// Кэш текстур для значений (vstrValue)
+std::vector<CTexture> vValueTextures;
+// Кэш текстур для даты/времени (vstrDate)
+std::vector<CTexture> vDateTextures;
+// Последние отрисованные строки (для сравнения)
+std::vector<std::string> vLastValueStrings;
+std::vector<std::string> vLastDateStrings;
 /////////////////////////////////////////////////////////////////////////////
 
 CTexture::CTexture()
@@ -372,6 +401,22 @@ bool init()
 
 	return success;
 }
+//Оптимальная функция загрузки Эта функция проверяет, не загружена ли текстура ранее, чтобы не дублировать данные в видеопамяти.
+bool LoadTexture(const std::string& name, const std::string& path) {
+	// Если такая текстура уже есть, не загружаем заново
+	if (gSharedTextures.count(name)) return true;
+
+	// 2. Используем метод вашего класса CTexture
+	// Он сам создаст SDL_Texture, заполнит mWidth/mHeight и удалит surface
+	if (gSharedTextures[name].loadFromFile(path)) {
+		return true;
+	}
+
+	// Если загрузка не удалась, удаляем пустой ключ из карты, чтобы не занимал место
+	gSharedTextures.erase(name);
+	return false;
+}
+
 
 //Функция загрузка изображений /////////////////////////////////////////////////////////////
 bool loadMedia()
@@ -382,7 +427,7 @@ bool loadMedia()
 	//Loading success flag
 	bool success = true;
 
-	//Open the font
+	// Загрузка шрифта
 	gFont = TTF_OpenFont( font_ttf, 20 );
 	if( gFont == NULL )
 	{
@@ -390,8 +435,8 @@ bool loadMedia()
 		success = false;
 	}
 
+	 // Настройка курсора
 	surfcursor = IMG_Load("./image/cursor53x66.png");
-
 	if(surfcursor == NULL)
 	{
 		std::cout << "Can't load: " << SDL_GetError() << std::endl;
@@ -406,18 +451,36 @@ bool loadMedia()
 
 
 
-//Считывание данных об изображения из файла//////////////////////////////////
+//Предварительная загрузка данных (Алерты) Считывание данных об изображения из файла//////////////////////////////////
 	read_alert(file_allertmessage);
 //-------------------------------------------------------------------------//
-	std::string snameFile = FILE_MODBUS;
-	read_modbus(snameFile);
-////////////////////////////////////////////////////////////////////////////
-	//Загрузка изображений
-	for (int i=0; i< vstrImage.size(); i++)
-	{
-		LoadImageTextureFromFile(vstrImage.at(i), &vRectClipCoord.at(i)  );
-	}
 
+////////////////////////////////////////////////////////////////////////////
+	// ИНИЦИАЛИЗАЦИЯ КЭША ТЕКСТУР
+	// Резервируем место под максимальное кол-во элементов (например, 100)
+	vValueTextures.resize(100);
+	vLastValueStrings.resize(100, "");
+
+	vDateTextures.resize(20);
+	vLastDateStrings.resize(20, "");
+	vstrValueMC.resize(4, ""); // Создает 4 пустые строки
+
+	//Загрузка изображений
+	// Проходим по всем объектам, которые считал парсер в gSceneElements
+	for (auto const& [objName, element] : gSceneElements) {
+
+		std::string texName = element.textureKey;
+
+		// Если текстура с таким именем еще не загружена в gSharedTextures
+		if (gSharedTextures.find(texName) == gSharedTextures.end()) {
+			std::string path = "./image/" + texName + ".png";
+
+			if (!gSharedTextures[texName].loadFromFile(path)) {
+				std::cout << "Ошибка загрузки файла: " << path << std::endl;
+				success = false;
+			}
+		}
+	}
 	return success;
 }
 
