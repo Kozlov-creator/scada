@@ -13,6 +13,10 @@
 
 // Глобальное хранилище координат
 
+extern bool showControlWindow;    // Флаг: показано ли окно
+extern std::string activeControlObject; // Имя объекта (например, "pump_left")
+extern SDL_FRect controlWindowRect; // Координаты окна по центру
+
 // 1. Хранилище уникальных текстур (Путь к файлу -> Объект класса)
 extern std::map<std::string, CTexture> gSharedTextures;
 
@@ -104,6 +108,48 @@ std::vector<CTexture> vectorTextureTextValue(4);
 CTexture tempCTexture;
 
 SDL_Color sdlcolor;
+//----------------------------------------------------------------------
+//Функция отрисовки DrawControlPopup. Эту функцию нужно вызывать в самом конце desctop1(), чтобы окно рисовалось поверх всех остальных элементов.
+void DrawControlPopup() {
+    if (!showControlWindow) return;
+
+    // 1. Затеняем задний план (полупрозрачный черный фон)
+    SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 150);
+    SDL_FRect fullScreen = { 0, 0, 1920, 1080 };
+    SDL_RenderFillRect(gRenderer, &fullScreen);
+
+    // 2. Рисуем основное тело окна
+    SDL_SetRenderDrawColor(gRenderer, 50, 50, 50, 255); // Темно-серый
+    SDL_RenderFillRect(gRenderer, &controlWindowRect);
+    SDL_SetRenderDrawColor(gRenderer, 200, 200, 200, 255); // Рамка
+    SDL_RenderRect(gRenderer, &controlWindowRect);
+
+    // 3. Заголовок окна
+    std::string title = "УПРАВЛЕНИЕ: " + activeControlObject;
+    tempCTexture.loadFromRenderedText(title, {255, 255, 255, 255});
+    SDL_FRect titleRect = { controlWindowRect.x + 20, controlWindowRect.y + 20, 400, 40 };
+    tempCTexture.render(0, &titleRect, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+
+    // 4. Кнопка "ВКЛЮЧИТЬ" (Зеленая)
+    SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
+    SDL_SetRenderDrawColor(gRenderer, 0, 150, 0, 255);
+    SDL_RenderFillRect(gRenderer, &btnOn);
+    tempCTexture.loadFromRenderedText("ПУСК", {255, 255, 255, 255});
+    tempCTexture.render(0, &btnOn, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+
+    // 5. Кнопка "ВЫКЛЮЧИТЬ" (Красная)
+    SDL_FRect btnOff = { controlWindowRect.x + 300, controlWindowRect.y + 150, 150, 80 };
+    SDL_SetRenderDrawColor(gRenderer, 150, 0, 0, 255);
+    SDL_RenderFillRect(gRenderer, &btnOff);
+    tempCTexture.loadFromRenderedText("СТОП", {255, 255, 255, 255});
+    tempCTexture.render(0, &btnOff, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
+
+    // 6. Кнопка "ЗАКРЫТЬ" (Маленький крестик в углу)
+    SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
+    SDL_SetRenderDrawColor(gRenderer, 200, 0, 0, 255);
+    SDL_RenderFillRect(gRenderer, &btnClose);
+}
 
 
 void read_image_config(const std::string);
@@ -217,6 +263,8 @@ void desctop1()
             tempCTexture.render(0, &gTextAlert[key], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
         }
     }
+
+    DrawControlPopup();
 
     // 5. Вывод на экран
     SDL_RenderPresent(gRenderer);
