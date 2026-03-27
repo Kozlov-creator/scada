@@ -8,6 +8,10 @@
 #include <iostream>
 #include <main.h>
 
+
+
+extern bool editMode;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
+
 // 1. Хранилище уникальных текстур (Путь к файлу -> Объект класса)
 extern std::map<std::string, CTexture> gSharedTextures;
 // Глобальное хранилище координат
@@ -40,8 +44,20 @@ void read_layout_config(const std::string& file_name) {
         std::istringstream iss(line);
         std::string type, name;
 
+        if (iss >> type) {
+            // 1. Проверяем одиночные параметры (без имени объекта)
+            if (type == "EDIT_MODE:") {
+                int mode;
+                if (iss >> mode) {
+                    editMode = (mode != 0);
+                    std::cout << "Режим редактирования: " << (editMode ? "ВКЛ" : "ВЫКЛ") << std::endl;
+                }
+                return; // Переходим к следующей строке файла
+            }
+
+          std::string name;
         // Читаем тип (IMG: или TXT:) и имя объекта
-        if (iss >> type >> name) {
+        if (iss >> name) {
             // Убираем двоеточие из имени "clock_fon:" -> "clock_fon"
             if (!name.empty() && name.back() == ':') {
                 name.pop_back();
@@ -50,9 +66,9 @@ void read_layout_config(const std::string& file_name) {
             float x, y, w, h;
             if (type == "IMG:") {
                 std::string fileName; // Имя файла (без .png)
-                if (iss >> fileName >> x >> y >> w >> h) {
+                if (iss >> fileName >> x >> y) {
                     // 1. Сохраняем объект в карту сцены
-                    gSceneElements[name] = { fileName, {x, y, w, h} };
+                    gSceneElements[name] = { fileName, {x, y, 0.0f, 0.0f} };
                 }
             }
 
@@ -67,7 +83,10 @@ void read_layout_config(const std::string& file_name) {
                     gTextConfig[name] = { x, y, w, h };
                 }
             }
+
+
         }
+    }
     }
     file.close();
 }
@@ -88,9 +107,7 @@ void save_layout_config(const std::string& file_name) {
         file << "IMG: " << objName << ": "
         << element.textureKey << " "
         << (int)element.rect.x << " "
-        << (int)element.rect.y << " "
-        << (int)element.rect.w << " "
-        << (int)element.rect.h << "\n";
+        << (int)element.rect.y << "\n";
     }
 
     file << "\n"; // Разделитель секций
@@ -117,7 +134,3 @@ void save_layout_config(const std::string& file_name) {
 }
 //-----------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------
-void InputCoord()
-{
-    read_layout_config(IMAGES_CONF);
-}

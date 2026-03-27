@@ -449,15 +449,11 @@ bool loadMedia()
 	}
 	SDL_SetCursor(mousecursor);
 
-
-
-//Предварительная загрузка данных (Алерты) Считывание данных об изображения из файла//////////////////////////////////
+	//Предварительная загрузка данных (Алерты) Считывание данных об изображения из файла//////////////////////////////////
 	read_alert(file_allertmessage);
-//-------------------------------------------------------------------------//
 
-////////////////////////////////////////////////////////////////////////////
-	// ИНИЦИАЛИЗАЦИЯ КЭША ТЕКСТУР
-	// Резервируем место под максимальное кол-во элементов (например, 100)
+
+	// ИНИЦИАЛИЗАЦИЯ КЭША ТЕКСТУР Резервируем место под максимальное кол-во элементов (например, 100)
 	vValueTextures.resize(100);
 	vLastValueStrings.resize(100, "");
 
@@ -467,7 +463,7 @@ bool loadMedia()
 
 	//Загрузка изображений
 	// Проходим по всем объектам, которые считал парсер в gSceneElements
-	for (auto const& [objName, element] : gSceneElements) {
+	for (auto& [objName, element] : gSceneElements) {
 
 		std::string texName = element.textureKey;
 
@@ -480,11 +476,13 @@ bool loadMedia()
 				success = false;
 			}
 		}
+		// 2. БЕРЕМ РАЗМЕРЫ ИЗ КЛАССА ТЕКСТУРЫ
+		// Теперь нам не нужен SDL_GetTextureSize, так как класс CTexture уже всё знает
+		element.rect.w = (float)gSharedTextures[texName].getWidth();
+		element.rect.h = (float)gSharedTextures[texName].getHeight();
 	}
 	return success;
 }
-
-
 
 //Function close//////////////////////////////////////////////////////////////////////
 void close()

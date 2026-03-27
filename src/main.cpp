@@ -26,6 +26,7 @@ udp::socket global_socket(io_context, udp::endpoint(udp::v4(), 1234));
 
 
 
+bool editMode = false;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
 
 // Глобальное хранилище координат
 // 2. ОБЪЕКТЫ: Описание элементов на экране
@@ -81,7 +82,7 @@ struct NetContext {
 
 
 void save_layout_config(const std::string& file_name);
-void InputCoord();
+void read_layout_config(const std::string& file_name);
 
 //-----------------------------------------------------------------------------
 // Аргументы: IP адрес МК, порт МК, порт ПК (исходящий), массив данных, длина данных
@@ -113,7 +114,7 @@ void send_mcu_command(std::string objName, uint8_t cmd) {
 	std::cout << "UDP Command Sent: " << (int)cmd << " to " << objName << std::endl;
 }
 //-----------------------------------------------------------------------------
-//Функция сетевого потока (UDP-клиент) Эта функция будет постоянно слушать сеть.
+//Функция сетевого потока (UDP-клиентInputCoord) Эта функция будет постоянно слушать сеть.
 int network_thread_func(void* ptr) {
 	// 1. Извлекаем контекст
 	NetContext* ctx = (NetContext*)ptr;
@@ -178,7 +179,8 @@ int main( int argc, char *args[] )
 	nCtx.socket = &global_socket;
 	nCtx.quitFlag = &net_quit;
 	nCtx.mutex = data_mutex;
-	InputCoord();
+
+	read_layout_config(IMAGES_CONF); //Функция парсера (Безопасная) retcoord.cpp
 
 	bool leftMouseButtonDown = false;
 	int xpos=0;
@@ -191,7 +193,7 @@ int main( int argc, char *args[] )
 
 
 
-	if( !init() )
+	if( !init() ) //texture_class.cpp
 	{
 		std::cout<< "Failed to initialize!" <<std::endl;
 	}
@@ -199,7 +201,7 @@ int main( int argc, char *args[] )
 	{
 		std::cout<<"init"<<std::endl;
 		//Загрузка медиа данных
-		if( !loadMedia() )
+		if( !loadMedia() ) //texture_class.cpp
 		{
 			std::cout<< "Failed to load media!" << std::endl;
 		}
@@ -286,134 +288,125 @@ int main( int argc, char *args[] )
 							case SDLK_S:
 							{ // Нажмите 'S' для сохранения
 								save_layout_config(IMAGES_CONF);
-								std::cout << "Конфигурация успешно сохранена!" << std::endl;
-							}
-						}
-					}
-					else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
-					{
-						if (leftMouseButtonDown && e.button.button == SDL_BUTTON_LEFT)
-								{
-									leftMouseButtonDown = false;
-									selectedRect = NULL;
-
-									// Если мы НЕ тащили объект, значит это КЛИК
-									if (!isDragging && !selectedObjectName.empty()) {
-
-										// ЛОГИКА УПРАВЛЕНИЯ ПО ИМЕНАМ
-										if (selectedObjectName == "pump_left") {
-											std::cout << "ОТКРЫВАЕМ ОКНО: Управление левым насосом" << std::endl;
-											// Здесь вызывайте вашу функцию: OpenPumpControl(1);
-										}
-										else if (selectedObjectName == "pump_right") {
-											std::cout << "ОТКРЫВАЕМ ОКНО: Управление правым насосом" << std::endl;
-										}
-										else if (selectedObjectName == "bg_main") {
-											std::cout << "Клик по фону - ничего не делаем" << std::endl;
-										}
-									}
-
-									leftMouseButtonDown = false;
-									selectedRect = nullptr;
-									selectedObjectName = "";
-
-								}
-					}
-
-					else if( e.type == SDL_EVENT_MOUSE_MOTION)
-					{
-						mousePos = { e.motion.x, e.motion.y };
-
-						if (leftMouseButtonDown && selectedRect != NULL)
-						{
-							isDragging = true; // Мы начали двигать объект
-							selectedRect->x = mousePos.x - clickOffset.x;
-
-							selectedRect->y = mousePos.y - clickOffset.y;
-
-						}
-					}
-					else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-					{
-						if (showControlWindow) {
-							// Проверяем кнопки ПУСК/СТОП/ЗАКРЫТЬ
-							SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
-							SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
-							SDL_FRect btnOff = { controlWindowRect.x + 300, controlWindowRect.y + 150, 150, 80 };
-
-							if (SDL_PointInRectFloat(&mousePos, &btnClose)) {
-								showControlWindow = false;
-							}
-							else if (SDL_PointInRectFloat(&mousePos, &btnOff)) {
-								send_mcu_command(activeControlObject, 0); // Команда СТОП
-							}
-							else if (SDL_PointInRectFloat(&mousePos, &btnOn)) {
-								std::cout << "ОТПРАВЛЯЕМ UDP КОМАНДУ ВКЛ ДЛЯ: " << activeControlObject << std::endl;
-								 send_mcu_command(activeControlObject, 1); // Команда ПУСК// Здесь ваш udp_send_data(...);
-							}
-							break; // Важно: не даем клику пройти к объектам на фоне!
-						}
-
-						if (!leftMouseButtonDown && e.button.button == SDL_BUTTON_LEFT)
-						{
-							leftMouseButtonDown = true;
-							selectedRect = nullptr; // Сбрасываем выбор
-
-							isDragging = false; // Пока еще не двигаем
-							selectedObjectName = "";
-
-							// Ищем среди картинок
-							for (auto& [name, element] : gSceneElements) {
-								if (SDL_PointInRectFloat(&mousePos, &element.rect)) {
-									selectedRect = &element.rect;
-									selectedObjectName = name; // Запоминаем имя!
-									clickOffset.x = mousePos.x - element.rect.x;
-									clickOffset.y = mousePos.y - element.rect.y;
-									break;
-								}
-							}
-
-							// 1. Проверка клика по фону часов (как у вас было)
-							if (SDL_PointInRectFloat(&mousePos, &fonClockRect))
-							{
-								screen = (screen == 1) ? 2 : 1;
-								// Если фон часов — это просто кнопка перехода, выходим
-								// Если его тоже надо двигать — не вызывайте return
+								std::cout << "Конфигурация сохранена вручную ('S')." << std::endl;
 								break;
 							}
 
-							// 2. Ищем среди ГРАФИЧЕСКИХ ОБЪЕКТОВ (IMG:)
-							for (auto& [name, element] : gSceneElements)
+							case SDLK_F2:
 							{
-								if (SDL_PointInRectFloat(&mousePos, &element.rect))
-								{
-									selectedRect = &element.rect;
-									clickOffset.x = mousePos.x - element.rect.x;
-									clickOffset.y = mousePos.y - element.rect.y;
-									std::cout << "Selected IMG: " << name << std::endl;
-									break; // Нашли объект, выходим из циклов
-								}
-							}
+								editMode = !editMode; // Переключаем режим (true <-> false)
+								std::cout << "РЕЖИМ РЕДАКТИРОВАНИЯ: " << (editMode ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН") << std::endl;
 
-							// 3. Ищем среди ТЕКСТОВЫХ ЗОН (TXT:)
-							for (auto& [name, rect] : gTextConfig)
-							{
-								if (SDL_PointInRectFloat(&mousePos, &rect))
-								{
-									selectedRect = &rect;
-									clickOffset.x = mousePos.x - rect.x;
-									clickOffset.y = mousePos.y - rect.y;
-									std::cout << "Selected TXT: " << name << std::endl;
-									break;
+								if (editMode) {
+								// Укажите имя вашего окна (например, window или gWindow)
+								SDL_SetWindowTitle(gWindow, "SCADA [РЕДАКТИРОВАНИЕ] - F2 для выхода");
+								std::cout << "Режим правки ВКЛ" << std::endl;}
+								// Опционально: если выходим из режима редактирования, можно сразу сохранить конфиг
+								else {
+									SDL_SetWindowTitle(gWindow, "SCADA [РАБОТА] - F2 для правок");
+									save_layout_config(IMAGES_CONF);
+									std::cout << "Режим правки ВЫКЛ, конфиг сохранен" << std::endl;
 								}
+								break;
 							}
-						}
-
-						if (!isDragging && !selectedObjectName.empty()) {
-							showControlWindow = true;
-							activeControlObject = selectedObjectName;
 						}
 					}
+
+					else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+					{
+						if (e.button.button == SDL_BUTTON_LEFT)
+						{
+							// Если это был быстрый клик (не тащили) и мы попали по объекту
+							if (!isDragging && !selectedObjectName.empty())
+							{
+								if (selectedObjectName == "CLOCK_SYSTEM") {
+								screen = (screen == 1) ? 2 : 1;
+								}
+								else if (selectedObjectName != "bg_main") {
+								activeControlObject = selectedObjectName;
+								showControlWindow = true;
+								}
+							}
+
+							// Сброс всех состояний захвата
+						leftMouseButtonDown = false;
+						isDragging = false;
+						selectedRect = nullptr;
+						selectedObjectName = "";
+						}
+					}
+
+
+
+					else if (e.type == SDL_EVENT_MOUSE_MOTION)
+					{
+						mousePos = { (float)e.motion.x, (float)e.motion.y };
+						if (leftMouseButtonDown && selectedRect && editMode)
+						{
+							// Порог чувствительности 3 пикселя
+							if (std::abs(e.motion.xrel) > 2 || std::abs(e.motion.yrel) > 2) {
+								isDragging = true;
+							}
+							selectedRect->x = mousePos.x - clickOffset.x;
+							selectedRect->y = mousePos.y - clickOffset.y;
+						}
+					}
+
+
+					else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+					{
+						if (e.button.button == SDL_BUTTON_LEFT)
+						{
+							mousePos = { (float)e.button.x, (float)e.button.y };
+							leftMouseButtonDown = true;
+							isDragging = false;
+							selectedRect = nullptr;
+							selectedObjectName = "";
+
+							// Сначала проверяем клик по кнопкам ОТКРЫТОГО окна (если оно есть)
+							if (showControlWindow) {
+								SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
+								SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
+								SDL_FRect btnOff = { controlWindowRect.x + 300, controlWindowRect.y + 150, 150, 80 };
+
+								if (SDL_PointInRectFloat(&mousePos, &btnClose)) { showControlWindow = false; break; }
+								if (SDL_PointInRectFloat(&mousePos, &btnOff))  { send_mcu_command(activeControlObject, 0); break; }
+								if (SDL_PointInRectFloat(&mousePos, &btnOn))   { send_mcu_command(activeControlObject, 1); break; }
+
+								// Если кликнули внутри окна, но не по кнопкам — блокируем клик сквозь окно
+								if (SDL_PointInRectFloat(&mousePos, &controlWindowRect)) break;
+							}
+
+							// Если окно не перехватило клик, ищем объект на сцене
+							if (SDL_PointInRectFloat(&mousePos, &fonClockRect)) {
+								selectedObjectName = "CLOCK_SYSTEM";
+							}
+							else {
+								for (auto& [name, element] : gSceneElements) {
+									if (SDL_PointInRectFloat(&mousePos, &element.rect)) {
+										selectedRect = &element.rect;
+										selectedObjectName = name;
+										break;
+									}
+								}
+								if (!selectedRect) { // Если не нашли в картинках, ищем в тексте
+									for (auto& [name, rect] : gTextConfig) {
+										if (SDL_PointInRectFloat(&mousePos, &rect)) {
+											selectedRect = &rect;
+											selectedObjectName = name;
+											break;
+										}
+									}
+								}
+							}
+
+							if (selectedRect) {
+								clickOffset.x = mousePos.x - selectedRect->x;
+								clickOffset.y = mousePos.y - selectedRect->y;
+							}
+						}
+					}
+
 
 				}
 
