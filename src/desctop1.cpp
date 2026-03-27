@@ -51,6 +51,10 @@ extern std::vector<CTexture> vDateTextures;
 extern std::vector<std::string> vLastValueStrings;
 extern std::vector<std::string> vLastDateStrings;
 
+extern SDL_FRect *selectedRect;
+extern bool editMode;
+
+
 class TimingUtil
 {
 public:
@@ -265,6 +269,34 @@ void desctop1()
     }
 
     DrawControlPopup();
+
+    if (editMode) {
+        // 1. Устанавливаем цвет рамки (например, ярко-зеленый)
+        // RGBA: 0, 255, 0, 255
+        SDL_SetRenderDrawColor(gRenderer, 0, 255, 0, 255);
+
+        // 2. Рисуем рамки для всех графических объектов
+        for (auto& [name, element] : gSceneElements) {
+            SDL_RenderRect(gRenderer, &element.rect);
+        }
+
+        // 3. Рисуем рамки для текстовых зон (другим цветом, например, желтым)
+        SDL_SetRenderDrawColor(gRenderer, 255, 255, 0, 255);
+        for (auto& [name, rect] : gTextConfig) {
+            SDL_RenderRect(gRenderer, &rect);
+        }
+
+        // 4. Подсветим КРАСНЫМ тот объект, который мы сейчас тащим
+        if (selectedRect != nullptr) {
+            SDL_SetRenderDrawColor(gRenderer, 255, 0, 0, 255);
+            // Рисуем рамку чуть толще (просто рисуем две с небольшим смещением)
+            SDL_RenderRect(gRenderer, selectedRect);
+
+            SDL_FRect boldRect = { selectedRect->x - 1, selectedRect->y - 1, selectedRect->w + 2, selectedRect->h + 2 };
+            SDL_RenderRect(gRenderer, &boldRect);
+        }
+    }
+
 
     // 5. Вывод на экран
     SDL_RenderPresent(gRenderer);

@@ -317,7 +317,8 @@ int main( int argc, char *args[] )
 						if (e.button.button == SDL_BUTTON_LEFT)
 						{
 							// Если это был быстрый клик (не тащили) и мы попали по объекту
-							if (!isDragging && !selectedObjectName.empty())
+							// 1. Если мы НЕ в режиме редактирования И это был просто клик (не перетаскивание)
+							if (!editMode && !isDragging && !selectedObjectName.empty())
 							{
 								if (selectedObjectName == "CLOCK_SYSTEM") {
 								screen = (screen == 1) ? 2 : 1;
@@ -326,6 +327,12 @@ int main( int argc, char *args[] )
 								activeControlObject = selectedObjectName;
 								showControlWindow = true;
 								}
+							}
+
+							// 2. Если мы БЫЛИ в режиме редактирования и что-то двигали
+							if (editMode && isDragging) {
+								std::cout << "Объект " << selectedObjectName << " перемещен в x:"
+								<< selectedRect->x << " y:" << selectedRect->y << std::endl;
 							}
 
 							// Сброс всех состояний захвата
