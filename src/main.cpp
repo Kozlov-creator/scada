@@ -25,6 +25,9 @@ asio::io_context io_context;
 udp::socket global_socket(io_context, udp::endpoint(udp::v4(), 1234));
 
 
+std::string destIP = "127.0.0.1";
+int destPort = 1234;
+int localPort = 1235;
 
 bool editMode = false;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
 
@@ -109,7 +112,7 @@ void send_mcu_command(std::string objName, uint8_t cmd) {
 
 	// IP адрес берем из remote_endpoint (из сетевого потока)
 	// или задаем статически (ipaddr_pc)
-	udp_send_data("192.168.1.197", 1235, 1234, packet, 1);
+	udp_send_data(destIP, destPort, localPort, packet, 1);
 
 	std::cout << "UDP Command Sent: " << (int)cmd << " to " << objName << std::endl;
 }

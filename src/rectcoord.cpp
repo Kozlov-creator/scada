@@ -9,6 +9,12 @@
 #include <main.h>
 
 
+extern std::string destIP;
+extern int destPort;
+extern int localPort;
+
+// Глобальный вектор для хранения строк, которые мы не умеем парсить (например, сетевые настройки)
+std::vector<std::string> gUnknownConfigLines;
 
 extern bool editMode;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
 
@@ -31,28 +37,55 @@ std::map<std::string, SDL_FRect> gTextAlert;
 //Функция парсера (Безопасная) Эта функция проигнорирует пустые строки и комментарии, корректно распарсив данные.Универсальный парсер Обновим функцию чтения, чтобы она понимала, куда записывать данные.
 void read_layout_config(const std::string& file_name) {
     std::ifstream file(file_name);
-    std::string line;
-
     if (!file.is_open()) {
         std::cerr << "Ошибка: не удалось открыть файл конфигурации: " << file_name << std::endl;
         return;
     }
 
+    gUnknownConfigLines.clear(); // Очищаем перед загрузкой
+    std::string line;
+
     while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#') {
+            gUnknownConfigLines.push_back(line); // Сохраняем комментарии и пустые строки
+            continue;
+        }
 
         std::istringstream iss(line);
-        std::string type, name;
+        std::string type;
 
-        if (iss >> type) {
+         if (!(iss >> type)) continue; // Считываем ТИП один раз
+
+            if (type == "NET:") {
+                std::string netParam;
+                if (iss >> netParam) {
+                    if (netParam == "DEST_IP:") {
+                        iss >> destIP;
+                        std::cout << "UDP Dest IP: " << destIP << std::endl;
+                    }
+                    else if (netParam == "DEST_PORT:") {
+                        iss >> destPort;
+                        std::cout << "UDP Dest Port: " << destPort << std::endl;
+                    }
+                    else if (netParam == "LOCAL_PORT:") {
+                        iss >> localPort;
+                        std::cout << "UDP Local Port: " << localPort << std::endl;
+                    }
+                }
+                 gUnknownConfigLines.push_back(line); // Сохраняем, чтобы не потерять при записи
+                continue; // Переходим к следующей строке
+            }
+
             // 1. Проверяем одиночные параметры (без имени объекта)
+            //Режим редактирования
             if (type == "EDIT_MODE:") {
                 int mode;
                 if (iss >> mode) {
                     editMode = (mode != 0);
                     std::cout << "Режим редактирования: " << (editMode ? "ВКЛ" : "ВЫКЛ") << std::endl;
                 }
-                return; // Переходим к следующей строке файла
+                // НЕ используем return, идем дальше
+                continue;
             }
 
           std::string name;
@@ -83,10 +116,16 @@ void read_layout_config(const std::string& file_name) {
                     gTextConfig[name] = { x, y, w, h };
                 }
             }
-
+            else {
+                gUnknownConfigLines.push_back(line);
+            }
 
         }
-    }
+        else {
+            // Если тип неизвестен (например, "NET:"), сохраняем строку целиком
+            gUnknownConfigLines.push_back(line);
+        }
+
     }
     file.close();
 }
@@ -99,8 +138,17 @@ void save_layout_config(const std::string& file_name) {
         return;
     }
 
-    file << "# SCADA Layout Configuration (Auto-saved)\n";
-    file << "# Формат: ТИП ИМЯ_ОБЪЕКТА: [ИМЯ_ФАЙЛА] X Y W H\n\n";
+    // 1. Сначала записываем всё, что мы не трогали (включая NET: настройки и комментарии)
+    for (const auto& unknownLine : gUnknownConfigLines) {
+        if (!unknownLine.empty()) {
+            file << unknownLine << "\n";
+        }
+    }
+
+    file << "\n# --- Auto-saved Dynamic Elements ---\n";
+
+    // 2. Сохраняем актуальный EDIT_MODE
+    file << "EDIT_MODE: " << (editMode ? "1" : "0") << "\n\n";
 
     // 1. Сохраняем ГРАФИЧЕСКИЕ ОБЪЕКТЫ (IMG:)
     for (auto const& [objName, element] : gSceneElements) {

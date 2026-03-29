@@ -1,13 +1,10 @@
 # SCADA Layout Configuration (Auto-saved)
 # Формат: ТИП ИМЯ_ОБЪЕКТА: [ИМЯ_ФАЙЛА] X Y W H
-# Сетевые настройки
-NET: DEST_IP: 127.0.0.1
-NET: DEST_PORT: 1235
-NET: LOCAL_PORT: 1234
-# --- Auto-saved Dynamic Elements ---
 
-# --- Auto-saved Dynamic Elements ---
-EDIT_MODE: 0
+# Сетевые настройки
+NET: DEST_IP: 192.168.1.50
+NET: DEST_PORT: 8888
+NET: LOCAL_PORT: 9999
 
 IMG: clock_fon: clock_fon 1490 10
 IMG: otvod_bottom_left_1: otvod_bottom_left 1300 587
@@ -16,9 +13,9 @@ IMG: pipe_horizontal200x23_another_2: pipe_horizontal200x23_another 612 453
 IMG: pipe_horizontal200x23_another_3: pipe_horizontal200x23_another 1000 452
 IMG: pipe_horizontal200x23_another_4: pipe_horizontal200x23_another 417 452
 IMG: pipe_horizontal200x23_another_5: pipe_horizontal200x23_another 224 452
-IMG: pump_1: pump_2_70x89 1195 399
+IMG: pump_1: pump_2_70x89 1200 394
 IMG: sensor_pressure_1: sensor_pressure70x70 977 389
-IMG: sensor_temperature_1: sensor_temperature44x140xcf 595 367
+IMG: sensor_temperature_1: sensor_temperature44x140xcf 599 368
 IMG: truba_1: truba 1352 483
 IMG: truba_vertical_1: truba_vertical 90 279
 IMG: truba_vertical_10: truba_vertical 162 295
