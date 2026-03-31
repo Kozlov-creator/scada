@@ -74,7 +74,25 @@ void read_layout_config(const std::string& file_name) {
         if (!(iss >> type)) continue;
 
         // Обработка сетевых настроек и режима редактирования (без изменений)
-        if (type == "NET:") { /* ... ваш код ... */ continue; }
+        if (type == "NET:") {
+            std::string netParam;
+            if (iss >> netParam) {
+                if (netParam == "DEST_IP:") {
+                    iss >> destIP;
+                    std::cout << "UDP Dest IP: " << destIP << std::endl;
+                }
+                else if (netParam == "DEST_PORT:") {
+                    iss >> destPort;
+                    std::cout << "UDP Dest Port: " << destPort << std::endl;
+                }
+                else if (netParam == "LOCAL_PORT:") {
+                    iss >> localPort;
+                    std::cout << "UDP Local Port: " << localPort << std::endl;
+                }
+            }
+            gUnknownConfigLines.push_back(line); // Сохраняем, чтобы не потерять при записи
+            continue; // Переходим к следующей строке
+        }
         if (type == "EDIT_MODE:") { /* ... ваш код ... */ continue; }
         // Внутри цикла while в парсере:
         if (type == "USE_SYSTEM_TIME:") {
@@ -165,6 +183,9 @@ void save_layout_config(const std::string& file_name) {
 
     // 2. Сохраняем актуальный EDIT_MODE
     file << "EDIT_MODE: " << (editMode ? "1" : "0") << "\n\n";
+
+    // 2. Сохраняем актуальный USE_SYSTEM_TIME
+    file << "USE_SYSTEM_TIME: " << (gUseSystemTime ? "1" : "0") << "\n\n";
 
     // 3. ЕДИНЫЙ ЦИКЛ ДЛЯ ВСЕХ ГРАФИЧЕСКИХ ОБЪЕКТОВ (теперь только IMG:)
     for (auto const& [objName, element] : gSceneElements) {
