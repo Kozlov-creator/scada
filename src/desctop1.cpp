@@ -9,10 +9,14 @@
 #include <main.h>
 #include <chrono>
 #include "data_struct.h" //  структура с сенсорами
+#include <unordered_map>
+
 
 
 // Глобальное хранилище координат
 
+
+extern std::vector<RenderItem> gRenderOrder; // Список в порядке слоев
 extern bool showControlWindow;    // Флаг: показано ли окно
 extern std::string activeControlObject; // Имя объекта (например, "pump_left")
 extern SDL_FRect controlWindowRect; // Координаты окна по центру
@@ -24,18 +28,16 @@ extern std::map<std::string, CTexture> gSharedTextures;
 extern std::map<std::string, CTexture> gSceneTextures;
 // Глобальное хранилище координат
 // 2. ОБЪЕКТЫ: Описание элементов на экране
-struct ScadaElement {
-    std::string textureKey; // Имя текстуры из gSharedTextures
-    SDL_FRect rect;         // Координаты на экране
-};
 
 struct MKElement {
     std::string textureKey; // Имя текстуры из gSharedTextures
     SDL_FRect rect;         // Координаты на экране
 };
 
-// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
-extern std::map<std::string, ScadaElement> gSceneElements;
+
+extern std::unordered_map<std::string, SceneElement> gSceneElements;
+extern std::unordered_map<std::string, std::string> gModbusData;
+
 extern std::map<std::string, SDL_FRect> gTextConfig;
 extern std::map<std::string, SDL_FRect> gTextAlert;
 // Глобальные данные для обмена между потоками
@@ -54,7 +56,11 @@ extern std::vector<std::string> vLastDateStrings;
 extern SDL_FRect *selectedRect;
 extern bool editMode;
 
+extern ProgressBar pressureBar;
+extern std::string get_modbus_datetime();
+extern std::string get_display_time();
 
+//==============================================================================================
 class TimingUtil
 {
 public:
@@ -223,9 +229,25 @@ void desctop1()
     SDL_SetRenderDrawColor(gRenderer, 129, 191, 254, 255);
     SDL_RenderClear(gRenderer);
 
-    // 2. ОТРИСОВКА ГРАФИКИ (IMG:)
+    // 2. ОТРИСОВКА ГРАФИКИ (IMGPNG:)
     // Проходим по всем объектам из конфига
-    for (auto const& [objName, img] : gSceneElements) {
+
+    // 2. ЕДИНЫЙ ЦИКЛ ОТРИСОВКИ ГРАФИКИ
+    for (auto& item : gRenderOrder) {
+        SceneElement* el = item.element;
+        std::string texKey = el->textureKey;
+
+        if (item.name.find("truba") != std::string::npos) {
+            // Рисуем как растягиваемую трубу (9-grid)
+            float flange = 10.0f;
+            SDL_RenderTexture9Grid(gRenderer, gSharedTextures[texKey].getTexture(),
+                                   nullptr, flange, 0, flange, 0, 1.0f, &el->rect);
+        } else {
+            // Обычная отрисовка текстуры
+            gSharedTextures[el->textureKey].render(0, &el->rect);
+        }
+    }
+   /* for (auto const& [objName, img] : gSceneElementsPNG) {
         // Ключ для поиска текстуры — это имя файла из конфига
         std::string texKey = img.textureKey;
 
@@ -234,6 +256,32 @@ void desctop1()
             gSharedTextures[texKey].render(0, const_cast<SDL_FRect*>(&img.rect), nullptr, 0.0, nullptr, SDL_FLIP_NONE);
         }
     }
+
+    // 2. ОТРИСОВКА ГРАФИКИ (IMGSVG:)
+    // Проходим по всем объектам из конфига
+    for (auto const& [objName, img] : gSceneElementsSVG) {
+        // Ключ для поиска текстуры — это имя файла из конфига
+        std::string texKey = img.textureKey;
+
+        if (gSharedTextures.count(texKey)) {
+            // Рисуем, передавая прямоугольник конкретного объекта
+            // ПРОВЕРКА: Если это труба (можно определять по имени или ключу)
+            if (objName.find("truba") != std::string::npos) {
+
+                float flange = 10.0f; // Размер фланца, который не должен искажаться
+
+                // Получаем указатель на текстуру из вашего класса-обертки
+                SDL_Texture* rawTex = gSharedTextures[texKey].getTexture();
+
+                // Рисуем с сохранением пропорций краев
+                SDL_RenderTexture9Grid(gRenderer, rawTex, nullptr,
+                                       flange, 0, flange, 0, // Отступы слева/справа
+                                       1.0f, &img.rect);
+            }
+           else {
+         gSharedTextures[texKey].render(0, const_cast<SDL_FRect*>(&img.rect), nullptr, 0.0, nullptr, SDL_FLIP_NONE);}
+        }
+    }*/
 
     // 3. ОТРИСОВКА ДАННЫХ МК (TXT:)
     // Обновляем строки из сетевой структуры (под мьютексом)
@@ -258,6 +306,18 @@ void desctop1()
         tempCTexture.render(0, &gTextConfig["temp_label"], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
     }*/
 
+   // 1. Получаем строку (либо из системы, либо из Modbus)
+   std::string currentTime = get_display_time();
+
+   // 2. Загружаем в текстуру
+   tempCTexture.loadFromRenderedText(currentTime, sdlcolor);
+   // 2. Создаем прямоугольник отрисовки
+   // x = 10, y = 10, ширину и высоту берем из самой текстуры
+   SDL_FRect textRect = { 10.0f, 10.0f, (float)tempCTexture.getWidth(), (float)tempCTexture.getHeight() };
+
+   // 3. Вызываем рендер
+   // Первый аргумент (xy) у вас 0, второй — адрес нашего прямоугольника
+   tempCTexture.render(0, &textRect);
     // 4. ОТРИСОВКА АЛЕРТОВ (TXT:)
     // Используем ваш метод render_alerts, но адаптированный под gTextAlert
     for (size_t i = 0; i < vstrAlert.size(); i++) {
@@ -267,6 +327,8 @@ void desctop1()
             tempCTexture.render(0, &gTextAlert[key], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
         }
     }
+
+    pressureBar.draw(gRenderer, shared_sensor_data.temperature); // Отрисовка бара
 
     DrawControlPopup();
 

@@ -12,6 +12,20 @@
 #define IMAGES_CONF "./coordinate/images.conf"
 
 
+struct SceneElement {
+    std::string textureKey; // Имя файла (без расширения)
+    SDL_FRect rect;         // Позиция и размер
+    int layer = 0;          // Слой отрисовки
+    bool isSVG = false;     // Флаг, чтобы отличать логику отрисовки (например, для 9-grid)
+};
+
+struct RenderItem {
+    std::string name;
+    SceneElement* element; // Теперь тип совпадает!
+
+    RenderItem(std::string n, SceneElement* el)
+    : name(n), element(el) {}
+};
 
 int threadFunction(void*);
 

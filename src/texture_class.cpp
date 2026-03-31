@@ -16,17 +16,14 @@
 #include <const_data.h>
 #include <main.h>
 
+
+#include <algorithm> // для std::clamp
+
 // 1. РЕСУРСЫ: Уникальные текстуры (Ключ: "pump" -> Обьект CTexture с данными из файла pump.png)
 std::map<std::string, CTexture> gSharedTextures;
 
 // 2. ОБЪЕКТЫ: Описание элементов на экране
-struct ScadaElement {
-	std::string textureKey; // Имя текстуры из gSharedTextures
-	SDL_FRect rect;         // Координаты на экране
-};
-
-// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
-std::map<std::string, ScadaElement> gSceneElements;
+extern std::unordered_map<std::string, SceneElement> gSceneElements;
 
 // 3. ТЕКСТ: Координаты текстовых полей
 extern std::map<std::string, SDL_FRect> gTextConfig;
@@ -60,6 +57,8 @@ std::vector<CTexture> vDateTextures;
 // Последние отрисованные строки (для сравнения)
 std::vector<std::string> vLastValueStrings;
 std::vector<std::string> vLastDateStrings;
+
+extern void refresh_render_order();
 /////////////////////////////////////////////////////////////////////////////
 
 CTexture::CTexture()
@@ -104,6 +103,46 @@ bool CTexture::loadTextureFromFile( std::string path )
 	return mTexture != nullptr;
 }
 
+bool CTexture::loadSVGAuto( std::string path )
+{
+	freeTexture();
+
+	// 1. Получаем текущий размер области отрисовки (окна)
+	int windowW, windowH;
+	if (!SDL_GetRenderOutputSize(gRenderer, &windowW, &windowH)) {
+		std::cout << "Error getting render size: " << SDL_GetError() << std::endl;
+		return false;
+	}
+
+	// 2. Открываем файл через IOStream (стандарт SDL3)
+	SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
+	if (!io) return false;
+
+	// 3. Растеризуем SVG сразу в размер окна
+	// Теперь картинка будет идеально четкой, без "мыла"
+	SDL_Surface* loadedSurface = IMG_LoadSizedSVG_IO(io, windowW, windowH);
+	SDL_CloseIO(io);
+
+	if (!loadedSurface) {
+		std::cout << "SVG Load Error: " << SDL_GetError() << std::endl;
+		return false;
+	}
+
+	// 4. Создаем текстуру
+	mTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
+
+	if (mTexture) {
+		mWidth = loadedSurface->w;
+		mHeight = loadedSurface->h;
+
+		// Включаем режим смешивания для поддержки прозрачности SVG
+		SDL_SetTextureBlendMode(mTexture, SDL_BLENDMODE_BLEND);
+	}
+
+	SDL_DestroySurface(loadedSurface);
+	return mTexture != nullptr;
+}
+
 
 bool CTexture::loadFromFile( std::string path )
 {
@@ -118,11 +157,10 @@ bool CTexture::loadFromFile( std::string path )
 	if( loadedSurface == nullptr )
 	{
 		std::cout<< "Unable to load image "<< path.c_str()<<" SDL_image Error: " << SDL_GetError() <<std::endl;
+		return false;
 	}
-	else
-	{
-		//Color key image
-		SDL_SetSurfaceColorKey( loadedSurface, true, SDL_MapSurfaceRGB( loadedSurface, 0, 0xFF, 0xFF ) );
+		// УДАЛЯЕМ SDL_SetSurfaceColorKey!
+		// SVG сам управляет прозрачностью через альфа-канал.
 
 		//Create texture from surface pixels
         newTexture = SDL_CreateTextureFromSurface( gRenderer, loadedSurface );
@@ -135,12 +173,13 @@ bool CTexture::loadFromFile( std::string path )
 			//Get image dimensions
 			mWidth = loadedSurface->w;
 			mHeight = loadedSurface->h;
+
+			// Включаем поддержку прозрачности для текстуры
+			SDL_SetTextureBlendMode(newTexture, SDL_BLENDMODE_BLEND);
 		}
 
-		//Избавьтесь от старой загруженной поверхности
-		SDL_DestroySurface( loadedSurface );
-	}
-
+	//Избавьтесь от старой загруженной поверхности
+	SDL_DestroySurface( loadedSurface );
 	//Return success
 	mTexture = newTexture;
 	return mTexture != nullptr;
@@ -462,25 +501,45 @@ bool loadMedia()
 	vstrValueMC.resize(4, ""); // Создает 4 пустые строки
 
 	//Загрузка изображений
-	// Проходим по всем объектам, которые считал парсер в gSceneElements
+	// Загрузка всех графических объектов (теперь только SVG)
 	for (auto& [objName, element] : gSceneElements) {
 
 		std::string texName = element.textureKey;
 
-		// Если текстура с таким именем еще не загружена в gSharedTextures
+		// 1. ЗАГРУЗКА ТЕКСТУРЫ (если еще не в памяти)
 		if (gSharedTextures.find(texName) == gSharedTextures.end()) {
-			std::string path = "./image/" + texName + ".png";
+			// Теперь путь всегда к .svg
+			std::string path = "./image/" + texName + ".svg";
 
 			if (!gSharedTextures[texName].loadFromFile(path)) {
 				std::cout << "Ошибка загрузки файла: " << path << std::endl;
 				success = false;
+				continue; // Пропускаем объект, если файл не найден
 			}
 		}
-		// 2. БЕРЕМ РАЗМЕРЫ ИЗ КЛАССА ТЕКСТУРЫ
-		// Теперь нам не нужен SDL_GetTextureSize, так как класс CTexture уже всё знает
-		element.rect.w = (float)gSharedTextures[texName].getWidth();
-		element.rect.h = (float)gSharedTextures[texName].getHeight();
+
+		// 2. ОПРЕДЕЛЕНИЕ РАЗМЕРОВ
+		// Если в конфиге размеры 0 (новый объект), берем родной размер SVG
+		if (element.rect.w <= 0.0f || element.rect.h <= 0.0f) {
+			element.rect.w = (float)gSharedTextures[texName].getWidth();
+			element.rect.h = (float)gSharedTextures[texName].getHeight();
+
+			std::cout << "Объект [" << objName << "] инициализирован размером SVG: "
+			<< element.rect.w << "x" << element.rect.h << std::endl;
+		}
+		else {
+			// Если размеры > 0, значит они кастомные (из конфига) — не трогаем их
+			std::cout << "Объект [" << objName << "] загружен с сохраненным размером: "
+			<< element.rect.w << "x" << element.rect.h << std::endl;
+		}
 	}
+
+	// 3. ОБНОВЛЯЕМ ОЧЕРЕДЬ ОТРИСОВКИ (Z-Order)
+	// После того как все элементы загружены, один раз строим список слоев
+	refresh_render_order();
+
+
+
 	return success;
 }
 
@@ -523,6 +582,37 @@ void close()
 	TTF_Quit();
 	//IMG_Quit();
 	SDL_Quit();
+}
+
+//===========================================================================================
+
+
+ProgressBar::ProgressBar(float x, float y, float w, float h): rect{x, y, w, h}
+{
+
+}
+
+void ProgressBar::draw(SDL_Renderer* renderer, float currentValue) {
+		// 1. Нормализуем значение от 0.0 до 1.0 (защита от выхода за границы)
+		float ratio = (currentValue - minVal) / (maxVal - minVal);
+		ratio = std::clamp(ratio, 0.0f, 1.0f);
+
+		// 2. Рисуем подложку (фон)
+		SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255); // Темно-серый
+		SDL_RenderFillRect(renderer, &rect);
+
+		// 3. Рассчитываем цвет (зеленый -> желтый -> красный)
+		uint8_t r = (ratio > 0.5f) ? 255 : (uint8_t)(ratio * 2 * 255);
+		uint8_t g = (ratio < 0.5f) ? 255 : (uint8_t)((1.0f - ratio) * 2 * 255);
+		SDL_SetRenderDrawColor(renderer, r, g, 0, 255);
+
+		// 4. Рисуем заполнение (ширина зависит от ratio)
+		SDL_FRect fillRect = { rect.x, rect.y, rect.w * ratio, rect.h };
+		SDL_RenderFillRect(renderer, &fillRect);
+
+		// 5. Рисуем контур
+		SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+		SDL_RenderRect(renderer, &rect);
 }
 
 

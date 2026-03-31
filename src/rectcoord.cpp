@@ -7,12 +7,17 @@
 #include <texture_class.h>
 #include <iostream>
 #include <main.h>
+#include <filesystem>
+#include <algorithm>
+#include <unordered_map>
 
+namespace fs = std::filesystem;
 
 extern std::string destIP;
 extern int destPort;
 extern int localPort;
 
+bool gUseSystemTime = false; // Глобальный флаг
 // Глобальный вектор для хранения строк, которые мы не умеем парсить (например, сетевые настройки)
 std::vector<std::string> gUnknownConfigLines;
 
@@ -22,16 +27,29 @@ extern bool editMode;//Реализация через флаг Edit Mode. В р
 extern std::map<std::string, CTexture> gSharedTextures;
 // Глобальное хранилище координат
 // 2. ОБЪЕКТЫ: Описание элементов на экране
-struct ScadaElement {
-    std::string textureKey; // Имя текстуры из gSharedTextures
-    SDL_FRect rect;         // Координаты на экране
-};
 
-// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
-extern std::map<std::string, ScadaElement> gSceneElements;
+extern std::unordered_map<std::string, SceneElement> gSceneElements;
+
+std::vector<RenderItem> gRenderOrder; // Список в порядке слоев
+
 // Хранилище для текста (Имя поля: Координаты)
 std::map<std::string, SDL_FRect> gTextConfig;
 std::map<std::string, SDL_FRect> gTextAlert;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Функция сортировки (вызывается 1 раз) Создайте функцию, которая собирает всё в один список и сортирует:
+void refresh_render_order() {
+    gRenderOrder.clear();
+
+    // Если у вас один общий map gSceneElements:
+    for (auto& pair : gSceneElements) {
+        gRenderOrder.emplace_back(pair.first, &pair.second);
+    }
+
+    // Сортировка по слою (используем поле прямо из структуры объекта)
+    std::sort(gRenderOrder.begin(), gRenderOrder.end(), [](const RenderItem& a, const RenderItem& b) {
+        return a.element->layer < b.element->layer;
+    });
+}
 
 ////////////////////////////////////////////////////////////
 //Функция парсера (Безопасная) Эта функция проигнорирует пустые строки и комментарии, корректно распарсив данные.Универсальный парсер Обновим функцию чтения, чтобы она понимала, куда записывать данные.
@@ -47,91 +65,89 @@ void read_layout_config(const std::string& file_name) {
 
     while (std::getline(file, line)) {
         if (line.empty() || line[0] == '#') {
-            gUnknownConfigLines.push_back(line); // Сохраняем комментарии и пустые строки
+            gUnknownConfigLines.push_back(line);
             continue;
         }
 
         std::istringstream iss(line);
         std::string type;
+        if (!(iss >> type)) continue;
 
-         if (!(iss >> type)) continue; // Считываем ТИП один раз
+        // Обработка сетевых настроек и режима редактирования (без изменений)
+        if (type == "NET:") { /* ... ваш код ... */ continue; }
+        if (type == "EDIT_MODE:") { /* ... ваш код ... */ continue; }
+        // Внутри цикла while в парсере:
+        if (type == "USE_SYSTEM_TIME:") {
+            int val;
+            if (iss >> val) gUseSystemTime = (val != 0);
+            continue;
+        }
 
-            if (type == "NET:") {
-                std::string netParam;
-                if (iss >> netParam) {
-                    if (netParam == "DEST_IP:") {
-                        iss >> destIP;
-                        std::cout << "UDP Dest IP: " << destIP << std::endl;
-                    }
-                    else if (netParam == "DEST_PORT:") {
-                        iss >> destPort;
-                        std::cout << "UDP Dest Port: " << destPort << std::endl;
-                    }
-                    else if (netParam == "LOCAL_PORT:") {
-                        iss >> localPort;
-                        std::cout << "UDP Local Port: " << localPort << std::endl;
-                    }
-                }
-                 gUnknownConfigLines.push_back(line); // Сохраняем, чтобы не потерять при записи
-                continue; // Переходим к следующей строке
-            }
-
-            // 1. Проверяем одиночные параметры (без имени объекта)
-            //Режим редактирования
-            if (type == "EDIT_MODE:") {
-                int mode;
-                if (iss >> mode) {
-                    editMode = (mode != 0);
-                    std::cout << "Режим редактирования: " << (editMode ? "ВКЛ" : "ВЫКЛ") << std::endl;
-                }
-                // НЕ используем return, идем дальше
-                continue;
-            }
-
-          std::string name;
-        // Читаем тип (IMG: или TXT:) и имя объекта
+        std::string name;
         if (iss >> name) {
-            // Убираем двоеточие из имени "clock_fon:" -> "clock_fon"
-            if (!name.empty() && name.back() == ':') {
-                name.pop_back();
-            }
+            if (!name.empty() && name.back() == ':') name.pop_back();
 
-            float x, y, w, h;
+            // 1. ОБЪЕДИНЕННАЯ ОБРАБОТКА ГРАФИКИ (SVG и старые PNG)
             if (type == "IMG:") {
-                std::string fileName; // Имя файла (без .png)
+                std::string fileName;
+                float x = 0, y = 0, w = 0, h = 0;
+                int layer = 0;
+
+                // Считываем имя файла и координаты
                 if (iss >> fileName >> x >> y) {
-                    // 1. Сохраняем объект в карту сцены
-                    gSceneElements[name] = { fileName, {x, y, 0.0f, 0.0f} };
+                    // Пробуем считать дополнительные параметры, если они есть
+                    if (!(iss >> w >> h >> layer)) {
+                        // Если их нет в строке — используем значения по умолчанию
+                        w = 0.0f;
+                        h = 0.0f;
+                        layer = 0;
+                    }
+
+                    // Записываем всё в единую карту объектов
+                    gSceneElements[name] = { fileName, {x, y, w, h}, layer };
                 }
             }
-
+            // 2. ТЕКСТОВЫЕ ЗОНЫ
             else if (type == "TXT_ALRT:") {
-                if (iss >> x >> y >> w >> h) {
-                    gTextAlert[name] = { x, y, w, h };
-                }
+                float x, y, w, h;
+                if (iss >> x >> y >> w >> h) gTextAlert[name] = { x, y, w, h };
+            }
+            else if (type == "TXT_MK:") {
+                float x, y, w, h;
+                if (iss >> x >> y >> w >> h) gTextConfig[name] = { x, y, w, h };
             }
 
-            else if (type == "TXT_MK:") {
-                if (iss >> x >> y >> w >> h) {
-                    gTextConfig[name] = { x, y, w, h };
-                }
-            }
             else {
                 gUnknownConfigLines.push_back(line);
             }
 
-        }
-        else {
-            // Если тип неизвестен (например, "NET:"), сохраняем строку целиком
-            gUnknownConfigLines.push_back(line);
-        }
 
+        }
     }
     file.close();
+
+     // ПОСЛЕ закрытия файла и загрузки всех текстур:
+   // refresh_render_order();
 }
 //--------------------------------------------------------------------------------------------
 //Функция сохранения save_layout_config. Эта функция перезаписывает файл, сохраняя актуальные координаты всех объектов, которые вы передвинули мышкой.
 void save_layout_config(const std::string& file_name) {
+
+    // 1. Создаем бэкап перед началом записи
+    if (fs::exists(file_name)) {
+        std::string backup_name = file_name + ".bak";
+        try {
+            // copy_options::overwrite_existing позволяет обновлять старый бэкап
+            fs::copy(file_name, backup_name, fs::copy_options::overwrite_existing);
+            std::cout << "Бэкап создан: " << backup_name << std::endl;
+        } catch (const fs::filesystem_error& e) {
+            std::cerr << "Критическая ошибка при создании бэкапа: " << e.what() << std::endl;
+            return; // Прекращаем, чтобы не испортить оригинал
+        }
+    }
+
+
+      // 2. Открываем файл для записи
     std::ofstream file(file_name);
     if (!file.is_open()) {
         std::cerr << "Ошибка: не удалось открыть файл для сохранения: " << file_name << std::endl;
@@ -150,35 +166,34 @@ void save_layout_config(const std::string& file_name) {
     // 2. Сохраняем актуальный EDIT_MODE
     file << "EDIT_MODE: " << (editMode ? "1" : "0") << "\n\n";
 
-    // 1. Сохраняем ГРАФИЧЕСКИЕ ОБЪЕКТЫ (IMG:)
+    // 3. ЕДИНЫЙ ЦИКЛ ДЛЯ ВСЕХ ГРАФИЧЕСКИХ ОБЪЕКТОВ (теперь только IMG:)
     for (auto const& [objName, element] : gSceneElements) {
         file << "IMG: " << objName << ": "
         << element.textureKey << " "
-        << (int)element.rect.x << " "
-        << (int)element.rect.y << "\n";
+        << element.rect.x << " "
+        << element.rect.y << " "
+        << element.rect.w << " "
+        << element.rect.h << " "
+        << element.layer << "\n";
     }
 
     file << "\n"; // Разделитель секций
 
-    // 2. Сохраняем ТЕКСТОВЫЕ ЗОНЫ (TXT:)
+    // 4. Сохраняем ТЕКСТОВЫЕ ЗОНЫ (TXT:) - без изменений
     for (auto const& [textName, rect] : gTextConfig) {
         file << "TXT_MK: " << textName << ": "
-        << (int)rect.x << " "
-        << (int)rect.y << " "
-        << (int)rect.w << " "
-        << (int)rect.h << "\n";
+        << (int)rect.x << " " << (int)rect.y << " "
+        << (int)rect.w << " " << (int)rect.h << "\n";
     }
 
-    // 2. Сохраняем ТЕКСТОВЫЕ ЗОНЫ (TXT:)
     for (auto const& [textName, rect] : gTextAlert) {
         file << "TXT_ALRT: " << textName << ": "
-        << (int)rect.x << " "
-        << (int)rect.y << " "
-        << (int)rect.w << " "
-        << (int)rect.h << "\n";
+        << (int)rect.x << " " << (int)rect.y << " "
+        << (int)rect.w << " " << (int)rect.h << "\n";
     }
 
     file.close();
+    std::cout << "Конфигурация успешно сохранена в формате IMG:" << std::endl;
 }
 //-----------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------

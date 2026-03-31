@@ -29,17 +29,14 @@ std::string destIP = "127.0.0.1";
 int destPort = 1234;
 int localPort = 1235;
 
+bool isResizing = false; // Добавьте эту глобальную переменную или в класс
+
 bool editMode = false;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
 
 // Глобальное хранилище координат
 // 2. ОБЪЕКТЫ: Описание элементов на экране
-struct ScadaElement {
-	std::string textureKey; // Имя текстуры из gSharedTextures
-	SDL_FRect rect;         // Координаты на экране
-};
-
-// Карта всех объектов (Ключ: "pump_left", "bg_main" и т.д.)
-extern std::map<std::string, ScadaElement> gSceneElements;
+std::unordered_map<std::string, SceneElement> gSceneElements;
+extern std::vector<RenderItem> gRenderOrder; // Список в порядке слоев
 extern std::map<std::string, SDL_FRect> gTextConfig;
 
 // Глобальные данные для обмена между потоками
@@ -82,7 +79,8 @@ struct NetContext {
 	SDL_Mutex* mutex;              // Мьютекс для данных
 };
 
-
+// Создаем объект (где-то при инициализации)
+ProgressBar pressureBar(100.0f, 150.0f, 200.0f, 30.0f);
 
 void save_layout_config(const std::string& file_name);
 void read_layout_config(const std::string& file_name);
@@ -341,9 +339,11 @@ int main( int argc, char *args[] )
 							// Сброс всех состояний захвата
 						leftMouseButtonDown = false;
 						isDragging = false;
+						isResizing = false;
 						selectedRect = nullptr;
 						selectedObjectName = "";
 						}
+
 					}
 
 
@@ -353,15 +353,35 @@ int main( int argc, char *args[] )
 						mousePos = { (float)e.motion.x, (float)e.motion.y };
 						if (leftMouseButtonDown && selectedRect && editMode)
 						{
+							if (isResizing) {
+
+								// ПРОВЕРКА: Если ширина больше высоты — тянем вбок, иначе — вниз
+								if (selectedRect->w >= selectedRect->h) {
+									// Горизонтальное растяжение
+									float newW = mousePos.x - selectedRect->x;
+									if (newW > 40.0f) {
+										selectedRect->w = newW;
+										 printf("Rect pointer: %p, New Width: %f\n", (void*)selectedRect, selectedRect->w);
+									}
+								} else {
+									// Вертикальное растяжение
+									float newH = mousePos.y - selectedRect->y;
+									if (newH > 40.0f) {
+										selectedRect->h = newH;
+									}
+								}
+							}
 							// Порог чувствительности 3 пикселя
-							if (std::abs(e.motion.xrel) > 2 || std::abs(e.motion.yrel) > 2) {
+							else {
+								// Обычное ПЕРЕМЕЩЕНИЕ
+								if (std::abs(e.motion.xrel) > 2 || std::abs(e.motion.yrel) > 2) {
 								isDragging = true;
 							}
 							selectedRect->x = mousePos.x - clickOffset.x;
 							selectedRect->y = mousePos.y - clickOffset.y;
+							}
 						}
 					}
-
 
 					else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 					{
@@ -370,10 +390,11 @@ int main( int argc, char *args[] )
 							mousePos = { (float)e.button.x, (float)e.button.y };
 							leftMouseButtonDown = true;
 							isDragging = false;
+							isResizing = false; // Сбрасываем флаг при новом клике
 							selectedRect = nullptr;
 							selectedObjectName = "";
 
-							// Сначала проверяем клик по кнопкам ОТКРЫТОГО окна (если оно есть)
+							// 1. Проверка кнопок окна управления (без изменений)
 							if (showControlWindow) {
 								SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
 								SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
@@ -382,40 +403,52 @@ int main( int argc, char *args[] )
 								if (SDL_PointInRectFloat(&mousePos, &btnClose)) { showControlWindow = false; break; }
 								if (SDL_PointInRectFloat(&mousePos, &btnOff))  { send_mcu_command(activeControlObject, 0); break; }
 								if (SDL_PointInRectFloat(&mousePos, &btnOn))   { send_mcu_command(activeControlObject, 1); break; }
-
-								// Если кликнули внутри окна, но не по кнопкам — блокируем клик сквозь окно
 								if (SDL_PointInRectFloat(&mousePos, &controlWindowRect)) break;
 							}
 
-							// Если окно не перехватило клик, ищем объект на сцене
-							if (SDL_PointInRectFloat(&mousePos, &fonClockRect)) {
-								selectedObjectName = "CLOCK_SYSTEM";
+							// 2. Ищем объект на сцене в общем контейнере
+							// Идем по gRenderOrder с конца, чтобы клик ловился на верхнем слое
+							for (auto it = gRenderOrder.rbegin(); it != gRenderOrder.rend(); ++it) {
+								if (SDL_PointInRectFloat(&mousePos, &it->element->rect)) {
+									selectedRect = &(it->element->rect);
+									selectedObjectName = it->name;
+									break;
+								}
 							}
-							else {
-								for (auto& [name, element] : gSceneElements) {
-									if (SDL_PointInRectFloat(&mousePos, &element.rect)) {
-										selectedRect = &element.rect;
+
+							// 3. Если не нашли в графике, ищем в тексте
+							if (!selectedRect) {
+								for (auto& [name, rect] : gTextConfig) {
+									if (SDL_PointInRectFloat(&mousePos, &rect)) {
+										selectedRect = &rect;
 										selectedObjectName = name;
 										break;
 									}
 								}
-								if (!selectedRect) { // Если не нашли в картинках, ищем в тексте
-									for (auto& [name, rect] : gTextConfig) {
-										if (SDL_PointInRectFloat(&mousePos, &rect)) {
-											selectedRect = &rect;
-											selectedObjectName = name;
-											break;
-										}
-									}
-								}
 							}
 
+							// 4. Логика захвата для перемещения или изменения размера
 							if (selectedRect) {
-								clickOffset.x = mousePos.x - selectedRect->x;
-								clickOffset.y = mousePos.y - selectedRect->y;
+								float edgeSize = 15.0f;
+								bool isVertical = (selectedRect->h > selectedRect->w);
+
+								bool hitRight = (mousePos.x > (selectedRect->x + selectedRect->w - edgeSize));
+								bool hitBottom = (mousePos.y > (selectedRect->y + selectedRect->h - edgeSize));
+
+								// Проверяем попадание в край для ресайза
+								if ((isVertical && hitBottom) || (!isVertical && hitRight)) {
+									isResizing = true;
+								} else {
+									isResizing = false;
+									// Смещение для корректного перетаскивания
+									clickOffset.x = mousePos.x - selectedRect->x;
+									clickOffset.y = mousePos.y - selectedRect->y;
+								}
 							}
 						}
 					}
+
+
 
 
 				}
