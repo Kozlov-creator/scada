@@ -11,79 +11,18 @@
 #include <iostream>
 
 #include <texture_class.h>
-#include <dot_class.h>
-#include <const_data.h>
-#include <main.h>
-#include "data_struct.h" //  структура с сенсорами
 #include <asio.hpp>
 
+#include "globals.h"
+#include "functions.h"
+
 using asio::ip::udp;
-
-
 
 asio::io_context io_context;
 udp::socket global_socket(io_context, udp::endpoint(udp::v4(), 1234));
 
-
-std::string destIP = "127.0.0.1";
-int destPort = 1234;
-int localPort = 1235;
-
-bool isResizing = false; // Добавьте эту глобальную переменную или в класс
-
-bool editMode = false;//Реализация через флаг Edit Mode. В режиме работы (Runtime) перетаскивание должно быть запрещено, чтобы оператор случайно не «унес» насос с экрана.
-
-// Глобальное хранилище координат
-// 2. ОБЪЕКТЫ: Описание элементов на экране
-std::unordered_map<std::string, SceneElement> gSceneElements;
-extern std::vector<RenderItem> gRenderOrder; // Список в порядке слоев
-extern std::map<std::string, SDL_FRect> gTextConfig;
-
-// Глобальные данные для обмена между потоками
-SensorData shared_sensor_data;
-SDL_Mutex* data_mutex;
-SDL_Mutex* modbus_mutex;
 bool net_quit = false;
 bool modbus_quit = false;
-
-//Окно, в которое мы будем отображать
-SDL_Window *gWindow = NULL;
-
-//Средство визуализации окна
-SDL_Renderer *gRenderer = NULL;
-
-//Глобально используемый шрифт
-TTF_Font *gFont = NULL;
-
-SDL_FRect *selectedRect = NULL;
-
-
-SDL_FRect fonClockRect={1490,5,400,50};
-
-
-bool showControlWindow = false;    // Флаг: показано ли окно
-std::string activeControlObject = ""; // Имя объекта (например, "pump_left")
-SDL_FRect controlWindowRect = { 700, 300, 500, 400 }; // Координаты окна по центру
-
-
-// Структура для передачи параметров в поток (если нужно)
-struct ThreadConfig {
-	std::string fileName;
-	bool* quitFlag;
-};
-
-//Создаем структуру контекста Объедините флаги и объекты в одну структуру, чтобы не плодить глобальные переменные.
-struct NetContext {
-	asio::ip::udp::socket* socket; // Указатель на сокет
-	bool* quitFlag;                // Указатель на флаг выхода
-	SDL_Mutex* mutex;              // Мьютекс для данных
-};
-
-// Создаем объект (где-то при инициализации)
-ProgressBar pressureBar(100.0f, 150.0f, 200.0f, 30.0f);
-
-void save_layout_config(const std::string& file_name);
-void read_layout_config(const std::string& file_name);
 
 //-----------------------------------------------------------------------------
 // Аргументы: IP адрес МК, порт МК, порт ПК (исходящий), массив данных, длина данных
@@ -110,7 +49,7 @@ void send_mcu_command(std::string objName, uint8_t cmd) {
 
 	// IP адрес берем из remote_endpoint (из сетевого потока)
 	// или задаем статически (ipaddr_pc)
-	udp_send_data(destIP, destPort, localPort, packet, 1);
+	udp_send_data(Scada::destIP, Scada::destPort, Scada::localPort, packet, 1);
 
 	std::cout << "UDP Command Sent: " << (int)cmd << " to " << objName << std::endl;
 }
@@ -144,7 +83,7 @@ int network_thread_func(void* ptr) {
 
 			if (!ec && len == sizeof(SensorData)) {
 				SDL_LockMutex(ctx->mutex);
-				memcpy(&shared_sensor_data, recv_buf, sizeof(SensorData));
+				memcpy(&Scada::shared_sensor_data, recv_buf, sizeof(SensorData));
 				SDL_UnlockMutex(ctx->mutex);
 			}
 		} catch (...) { /* ошибка сети */   break; // При любой системной ошибке сокета — выход
@@ -179,9 +118,9 @@ int main( int argc, char *args[] )
 	NetContext nCtx;
 	nCtx.socket = &global_socket;
 	nCtx.quitFlag = &net_quit;
-	nCtx.mutex = data_mutex;
+	nCtx.mutex = Scada::data_mutex;
 
-	read_layout_config(IMAGES_CONF); //Функция парсера (Безопасная) retcoord.cpp
+
 
 	bool leftMouseButtonDown = false;
 	int xpos=0;
@@ -231,8 +170,8 @@ int main( int argc, char *args[] )
 			// --- ВНУТРИ main, перед while(!quit) ---
 			ThreadConfig mConfig = { FILE_MODBUS, &modbus_quit };
 
-			data_mutex = SDL_CreateMutex();
-			modbus_mutex = SDL_CreateMutex(); // Создаем мьютекс
+			Scada::data_mutex = SDL_CreateMutex();
+			Scada::modbus_mutex = SDL_CreateMutex(); // Создаем мьютекс
 			net_quit = false;
 			modbus_quit = false;
 
@@ -241,7 +180,6 @@ int main( int argc, char *args[] )
 			SDL_Thread* netThread = SDL_CreateThread(network_thread_func, "NetThread", &nCtx);
 			SDL_Thread* modbusThread = SDL_CreateThread(modbus_thread_func, "ModbusThread", &mConfig);
 
-			bool isDragging = false; // Глобально или в main
 			std::string selectedObjectName = ""; // Имя выбранного объекта
 			//Основной цикл
 			while( !quit )
@@ -295,16 +233,16 @@ int main( int argc, char *args[] )
 
 							case SDLK_F2:
 							{
-								editMode = !editMode; // Переключаем режим (true <-> false)
-								std::cout << "РЕЖИМ РЕДАКТИРОВАНИЯ: " << (editMode ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН") << std::endl;
+								Scada::editMode = !Scada::editMode; // Переключаем режим (true <-> false)
+								std::cout << "РЕЖИМ РЕДАКТИРОВАНИЯ: " << (Scada::editMode ? "ВКЛЮЧЕН" : "ВЫКЛЮЧЕН") << std::endl;
 
-								if (editMode) {
-								// Укажите имя вашего окна (например, window или gWindow)
-								SDL_SetWindowTitle(gWindow, "SCADA [РЕДАКТИРОВАНИЕ] - F2 для выхода");
+								if (Scada::editMode) {
+								// Укажите имя вашего окна (например, window или Scada::gWindow)
+								SDL_SetWindowTitle(Scada::gWindow, "SCADA [РЕДАКТИРОВАНИЕ] - F2 для выхода");
 								std::cout << "Режим правки ВКЛ" << std::endl;}
 								// Опционально: если выходим из режима редактирования, можно сразу сохранить конфиг
 								else {
-									SDL_SetWindowTitle(gWindow, "SCADA [РАБОТА] - F2 для правок");
+									SDL_SetWindowTitle(Scada::gWindow, "SCADA [РАБОТА] - F2 для правок");
 									save_layout_config(IMAGES_CONF);
 									std::cout << "Режим правки ВЫКЛ, конфиг сохранен" << std::endl;
 								}
@@ -319,28 +257,28 @@ int main( int argc, char *args[] )
 						{
 							// Если это был быстрый клик (не тащили) и мы попали по объекту
 							// 1. Если мы НЕ в режиме редактирования И это был просто клик (не перетаскивание)
-							if (!editMode && !isDragging && !selectedObjectName.empty())
+							if (!Scada::editMode && !Scada::isDragging && !selectedObjectName.empty())
 							{
 								if (selectedObjectName == "CLOCK_SYSTEM") {
 								screen = (screen == 1) ? 2 : 1;
 								}
 								else if (selectedObjectName != "bg_main") {
-								activeControlObject = selectedObjectName;
-								showControlWindow = true;
+								Scada::activeControlObject = selectedObjectName;
+								Scada::showControlWindow = true;
 								}
 							}
 
 							// 2. Если мы БЫЛИ в режиме редактирования и что-то двигали
-							if (editMode && isDragging) {
+							if (Scada::editMode && Scada::isDragging) {
 								std::cout << "Объект " << selectedObjectName << " перемещен в x:"
-								<< selectedRect->x << " y:" << selectedRect->y << std::endl;
+								<< Scada::selectedRect->x << " y:" << Scada::selectedRect->y << std::endl;
 							}
 
 							// Сброс всех состояний захвата
 						leftMouseButtonDown = false;
-						isDragging = false;
-						isResizing = false;
-						selectedRect = nullptr;
+						Scada::isDragging = false;
+						Scada::isResizing = false;
+						Scada::selectedRect = nullptr;
 						selectedObjectName = "";
 						}
 
@@ -351,23 +289,23 @@ int main( int argc, char *args[] )
 					else if (e.type == SDL_EVENT_MOUSE_MOTION)
 					{
 						mousePos = { (float)e.motion.x, (float)e.motion.y };
-						if (leftMouseButtonDown && selectedRect && editMode)
+						if (leftMouseButtonDown && Scada::selectedRect && Scada::editMode)
 						{
-							if (isResizing) {
+							if (Scada::isResizing) {
 
 								// ПРОВЕРКА: Если ширина больше высоты — тянем вбок, иначе — вниз
-								if (selectedRect->w >= selectedRect->h) {
+								if (Scada::selectedRect->w >= Scada::selectedRect->h) {
 									// Горизонтальное растяжение
-									float newW = mousePos.x - selectedRect->x;
+									float newW = mousePos.x - Scada::selectedRect->x;
 									if (newW > 40.0f) {
-										selectedRect->w = newW;
-										 printf("Rect pointer: %p, New Width: %f\n", (void*)selectedRect, selectedRect->w);
+										Scada::selectedRect->w = newW;
+										 printf("Rect pointer: %p, New Width: %f\n", (void*)Scada::selectedRect, Scada::selectedRect->w);
 									}
 								} else {
 									// Вертикальное растяжение
-									float newH = mousePos.y - selectedRect->y;
+									float newH = mousePos.y - Scada::selectedRect->y;
 									if (newH > 40.0f) {
-										selectedRect->h = newH;
+										Scada::selectedRect->h = newH;
 									}
 								}
 							}
@@ -375,10 +313,10 @@ int main( int argc, char *args[] )
 							else {
 								// Обычное ПЕРЕМЕЩЕНИЕ
 								if (std::abs(e.motion.xrel) > 2 || std::abs(e.motion.yrel) > 2) {
-								isDragging = true;
+								Scada::isDragging = true;
 							}
-							selectedRect->x = mousePos.x - clickOffset.x;
-							selectedRect->y = mousePos.y - clickOffset.y;
+							Scada::selectedRect->x = mousePos.x - clickOffset.x;
+							Scada::selectedRect->y = mousePos.y - clickOffset.y;
 							}
 						}
 					}
@@ -389,60 +327,42 @@ int main( int argc, char *args[] )
 						{
 							mousePos = { (float)e.button.x, (float)e.button.y };
 							leftMouseButtonDown = true;
-							isDragging = false;
-							isResizing = false; // Сбрасываем флаг при новом клике
-							selectedRect = nullptr;
+							Scada::isDragging = false;
+							Scada::isResizing = false;
+							Scada::selectedRect = nullptr;
 							selectedObjectName = "";
 
-							// 1. Проверка кнопок окна управления (без изменений)
-							if (showControlWindow) {
-								SDL_FRect btnClose = { controlWindowRect.x + controlWindowRect.w - 40, controlWindowRect.y + 10, 30, 30 };
-								SDL_FRect btnOn = { controlWindowRect.x + 50, controlWindowRect.y + 150, 150, 80 };
-								SDL_FRect btnOff = { controlWindowRect.x + 300, controlWindowRect.y + 150, 150, 80 };
-
-								if (SDL_PointInRectFloat(&mousePos, &btnClose)) { showControlWindow = false; break; }
-								if (SDL_PointInRectFloat(&mousePos, &btnOff))  { send_mcu_command(activeControlObject, 0); break; }
-								if (SDL_PointInRectFloat(&mousePos, &btnOn))   { send_mcu_command(activeControlObject, 1); break; }
-								if (SDL_PointInRectFloat(&mousePos, &controlWindowRect)) break;
+							// 1. Проверка кнопок окна управления (оставляем как есть)
+							if (Scada::showControlWindow) {
+								SDL_FRect btnClose = { Scada::controlWindowRect.x + Scada::controlWindowRect.w - 40, Scada::controlWindowRect.y + 10, 30, 30 };
+								if (SDL_PointInRectFloat(&mousePos, &btnClose)) { Scada::showControlWindow = false; break; }
+								SDL_FRect btnOn = { Scada::controlWindowRect.x + 50, Scada::controlWindowRect.y + 150, 150, 80 };
+								SDL_FRect btnOff = { Scada::controlWindowRect.x + 300, Scada::controlWindowRect.y + 150, 150, 80 };
+								if (SDL_PointInRectFloat(&mousePos, &btnClose)) { Scada::showControlWindow = false; break; }
+								if (SDL_PointInRectFloat(&mousePos, &btnOff))  { send_mcu_command(Scada::activeControlObject, 0); break; }
+								if (SDL_PointInRectFloat(&mousePos, &btnOn))   { send_mcu_command(Scada::activeControlObject, 1); break; }
+								if (SDL_PointInRectFloat(&mousePos, &Scada::controlWindowRect)) break;
 							}
 
-							// 2. Ищем объект на сцене в общем контейнере
-							// Идем по gRenderOrder с конца, чтобы клик ловился на верхнем слое
-							for (auto it = gRenderOrder.rbegin(); it != gRenderOrder.rend(); ++it) {
-								if (SDL_PointInRectFloat(&mousePos, &it->element->rect)) {
-									selectedRect = &(it->element->rect);
-									selectedObjectName = it->name;
-									break;
-								}
-							}
+							// 2. ИСПОЛЬЗУЕМ КЛАСС: Ищем графический объект
 
-							// 3. Если не нашли в графике, ищем в тексте
-							if (!selectedRect) {
-								for (auto& [name, rect] : gTextConfig) {
-									if (SDL_PointInRectFloat(&mousePos, &rect)) {
-										selectedRect = &rect;
-										selectedObjectName = name;
-										break;
-									}
-								}
-							}
+							Scada::selectedRect = App::scene.findElementAt(mousePos.x, mousePos.y, selectedObjectName);
 
-							// 4. Логика захвата для перемещения или изменения размера
-							if (selectedRect) {
+
+							// 4. Логика захвата (Resize / Drag)
+							if (Scada::selectedRect) {
 								float edgeSize = 15.0f;
-								bool isVertical = (selectedRect->h > selectedRect->w);
-
-								bool hitRight = (mousePos.x > (selectedRect->x + selectedRect->w - edgeSize));
-								bool hitBottom = (mousePos.y > (selectedRect->y + selectedRect->h - edgeSize));
-
+								bool isVertical = (Scada::selectedRect->h > Scada::selectedRect->w);
+								bool hitRight = (mousePos.x > (Scada::selectedRect->x + Scada::selectedRect->w - edgeSize));
+								bool hitBottom = (mousePos.y > (Scada::selectedRect->y + Scada::selectedRect->h - edgeSize));
 								// Проверяем попадание в край для ресайза
 								if ((isVertical && hitBottom) || (!isVertical && hitRight)) {
-									isResizing = true;
+									Scada::isResizing = true;
 								} else {
-									isResizing = false;
+									Scada::isResizing = false;
 									// Смещение для корректного перетаскивания
-									clickOffset.x = mousePos.x - selectedRect->x;
-									clickOffset.y = mousePos.y - selectedRect->y;
+									clickOffset.x = mousePos.x - Scada::selectedRect->x;
+									clickOffset.y = mousePos.y - Scada::selectedRect->y;
 								}
 							}
 						}
@@ -451,14 +371,15 @@ int main( int argc, char *args[] )
 
 
 
+
 				}
 
 				// --- ОБНОВЛЕНИЕ ГРАФИКИ ДАННЫМИ ---
-				SDL_LockMutex(data_mutex);
-				// Теперь shared_sensor_data содержит актуальные значения
+				SDL_LockMutex(Scada::data_mutex);
+				// Теперь Scada::shared_sensor_data содержит актуальные значения
 				// Можно обновить тексты или координаты объектов:
-				// label_temp.text = std::to_string(shared_sensor_data.temperature);
-				SDL_UnlockMutex(data_mutex);
+				// label_temp.text = std::to_string(Scada::shared_sensor_data.temperature);
+				SDL_UnlockMutex(Scada::data_mutex);
 
 			// Отрисовка десктопов
 			switch (screen)
@@ -480,10 +401,10 @@ int main( int argc, char *args[] )
 			if (netThread) SDL_DetachThread(netThread);// "грязный", но рабочий хак для диагностики:
 
 			// 3. И только теперь удаляем мьютексы
-			SDL_DestroyMutex(data_mutex);
+			SDL_DestroyMutex(Scada::data_mutex);
 			SDL_WaitThread(modbusThread, nullptr);
 
-			SDL_DestroyMutex(modbus_mutex);
+			SDL_DestroyMutex(Scada::modbus_mutex);
 
 		}
 	}

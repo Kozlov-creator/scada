@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="9.8275862mm"
-   height="10mm"
-   viewBox="0 0 9.8275864 9.9999999"
+   width="6.5005388mm"
+   height="6.6145835mm"
+   viewBox="0 0 6.5005389 6.6145835"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="1.0066252"
-     inkscape:cx="142.05883"
-     inkscape:cy="66.062324"
+     inkscape:zoom="16.106003"
+     inkscape:cx="17.322733"
+     inkscape:cy="21.203274"
      inkscape:window-width="1920"
      inkscape:window-height="1008"
      inkscape:window-x="0"
@@ -60,27 +60,22 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-7.0625796,-8.5996609)">
-    <ellipse
-       style="fill:#e6e6e6;stroke-width:0.122722"
-       id="path1"
-       cx="11.976373"
-       cy="13.599661"
-       rx="4.9137931"
-       ry="5" />
-    <text
-       xml:space="preserve"
-       style="font-size:3.175px;writing-mode:lr-tb;direction:ltr;white-space:pre-wrap;shape-inside:url(#path1) url(#text6);display:inline;fill:#e6e6e6;stroke-width:0.264583"
-       x="14.125156"
-       y="16.727158"
-       id="text4"><tspan
-         x="8.0969982"
-         y="15.457213"
-         id="tspan1">P</tspan></text>
-    <path
-       d="m 12.413295,10.286666 q 1.423284,0 2.073925,0.539264 0.650644,0.539265 0.650644,1.519744 0,0.578482 -0.27449,1.088331 -0.264323,0.500043 -0.904802,0.813797 -0.630308,0.313754 -1.718104,0.313754 h -0.833637 v 2.725731 h -0.914967 v -7.000621 z m -0.08134,0.754969 h -0.925134 v 2.764951 h 0.731974 q 1.036963,0 1.545279,-0.323557 0.508315,-0.323559 0.508315,-1.098137 0,-0.67653 -0.447319,-1.009892 -0.447316,-0.333365 -1.413115,-0.333365 z"
-       id="text6"
-       style="font-size:13.9016px;fill:#0000ff;stroke-width:0.831995"
-       aria-label="P" />
+     transform="translate(-7.0625795,-8.5996609)">
+    <g
+       id="g1"
+       transform="matrix(0.66145833,0,0,0.66145833,2.3909774,2.9113436)">
+      <ellipse
+         style="fill:#e6e6e6;stroke-width:0.122722"
+         id="path1"
+         cx="11.976373"
+         cy="13.599661"
+         rx="4.9137931"
+         ry="5" />
+      <path
+         d="m 11.884128,10.286666 q 1.423284,0 2.073925,0.539264 0.650644,0.539265 0.650644,1.519744 0,0.578482 -0.27449,1.088331 -0.264323,0.500043 -0.904802,0.813797 -0.630308,0.313754 -1.718104,0.313754 h -0.833637 v 2.725731 H 9.9626973 v -7.000621 z m -0.08134,0.754969 h -0.925134 v 2.764951 h 0.731974 q 1.036963,0 1.545279,-0.323557 0.508315,-0.323559 0.508315,-1.098137 0,-0.67653 -0.447319,-1.009892 -0.447316,-0.333365 -1.413115,-0.333365 z"
+         id="text6"
+         style="font-size:13.9016px;fill:#0000ff;stroke-width:0.831995"
+         aria-label="P" />
+    </g>
   </g>
 </svg>

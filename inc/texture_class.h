@@ -1,6 +1,4 @@
-#ifndef __TEXTURE_CLASS_H__
-#define __TEXTURE_CLASS_H__
-
+#pragma once
 
 //Класс обертка для работы с текстурами
 
@@ -59,26 +57,6 @@ class CTexture
 };
 
 
-
-
-// ФУНКЦИИ
-
-SDL_Texture *LoadFromRenderedText (std::string, SDL_FRect&);
-
-//void LoadFromRenderedText (std::string, SDL_Rect&, SDL_Texture&);
-
-void LoadImageTextureFromFile( std::string , SDL_FRect* );
-
-//Запускает SDL2 и создает окно Starts up SDL2 and creates window
-bool init();
-
-//Загрузка медиа данных Loads media
-bool loadMedia();
-
-//Освобождает медиа данные и отключает SDL2 Frees media and shuts down SDL2
-void close();
-
-
 class ProgressBar {
 public:
 	SDL_FRect rect;      // Позиция и размер {x, y, w, h}
@@ -90,4 +68,3 @@ public:
 	void draw(SDL_Renderer* renderer, float currentValue);
 };
 
-#endif //__TEXTURE_CLASS_H__

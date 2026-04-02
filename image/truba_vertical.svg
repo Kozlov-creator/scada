@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="3.175mm"
-   height="79.375mm"
-   viewBox="0 0 3.175 79.375001"
+   width="1.5875mm"
+   height="39.6875mm"
+   viewBox="0 0 1.5875 39.6875"
    version="1.1"
    id="svg1"
    inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
@@ -39,14 +39,14 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-54.083728,12.823404)">
+     transform="translate(-54.083727,12.823404)">
     <rect
-       style="fill:#555555;fill-opacity:1;stroke-width:0.17604"
+       style="fill:#555555;fill-opacity:1;stroke-width:0.08802"
        id="rect1"
-       width="79.375"
-       height="3.175"
+       width="39.6875"
+       height="1.5875"
        x="-12.823404"
-       y="-57.258728"
+       y="-55.671227"
        transform="rotate(90)" />
   </g>
 </svg>
