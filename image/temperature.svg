@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="6.6145835mm"
+   height="6.7303452mm"
+   viewBox="0 0 6.6145836 6.7303452"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   sodipodi:docname="temperature.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="4.0265008"
+     inkscape:cx="69.290934"
+     inkscape:cy="58.984218"
+     inkscape:window-width="1920"
+     inkscape:window-height="1008"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <font
+       horiz-adv-x="1000"
+       id="font1"
+       inkscape:label="font 1"
+       horiz-origin-x="0"
+       horiz-origin-y="0"
+       vert-origin-x="512"
+       vert-origin-y="768"
+       vert-adv-y="1024">
+      <font-face
+         units-per-em="1000"
+         ascent="750"
+         cap-height="600"
+         x-height="400"
+         descent="200"
+         id="font-face1"
+         font-family="SVGFont 1" />
+      <missing-glyph
+         d="M0,0h1000v1000h-1000z"
+         id="missing-glyph1" />
+    </font>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-7.0623724,-8.5996606)">
+    <ellipse
+       style="fill:#e6e6e6;stroke-width:0.0825961"
+       id="path1"
+       cx="10.369664"
+       cy="11.964833"
+       rx="3.3072917"
+       ry="3.3651726" />
+    <path
+       d="M 10.713508,14.658543 H 10.11518 V 10.437008 H 8.6326571 V 9.9118091 h 3.5567269 v 0.5251989 h -1.475876 z"
+       id="text1"
+       style="font-size:9.87778px;fill:#0000ff;stroke-width:0.178073;stroke-linejoin:round;stroke-miterlimit:20;stroke-dashoffset:566.929"
+       aria-label="T" />
+  </g>
+</svg>
