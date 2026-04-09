@@ -219,35 +219,37 @@ void CTexture::setAlpha( Uint8 alpha )
 }
 
 //void CTexture::render( float x, float y, SDL_FRect *clipRect, double angle, SDL_FPoint *center, SDL_FlipMode flipRender )
-void CTexture::render( int xy, SDL_FRect *renderQuad, SDL_FRect *clipRect, double angle, SDL_FPoint *center, SDL_FlipMode flipRender )
+void CTexture::render( int xy, const SDL_FRect *renderQuad, SDL_FRect *clipRect, double angle, SDL_FPoint *center, SDL_FlipMode flipRender )
 {
-	//Set rendering space and render to screen
-	//SDL_FRect renderQuad = { x, y, mWidth, mHeight };
-	if ( renderQuad == nullptr )
-	{SDL_FRect temprenderQuad = { mX, mY, mWidth, mHeight }; renderQuad=&temprenderQuad;}
-	else
-	{
-		renderQuad -> w = mWidth;
-		renderQuad -> h = mHeight;
-		if (xy)
-		{
-			renderQuad -> x = mX;
-			renderQuad -> y = mY;
+	// 1. Создаем локальную копию прямоугольника.
+	// Если renderQuad передан, копируем его. Если нет — берем внутренние координаты mX, mY.
+	SDL_FRect finalQuad;
+
+	if (renderQuad == nullptr) {
+		finalQuad = { mX, mY, mWidth, mHeight };
+	} else {
+		finalQuad = *renderQuad; // Копируем данные из const указателя
+
+		// Теперь мы можем спокойно менять finalQuad, не трогая оригинал в конфиге
+		finalQuad.w = mWidth;
+		finalQuad.h = mHeight;
+		if (xy) {
+			finalQuad.x = mX;
+			finalQuad.y = mY;
 		}
-
 	}
 
-	//Set clip rendering dimensions
-	if( clipRect != nullptr )
-	{
-		renderQuad -> w = clipRect->w;
-		renderQuad -> h = clipRect->h;
-		renderQuad -> x = clipRect -> x;
-		renderQuad -> y = clipRect -> y;
+	// 2. Если есть область обрезки (clip), корректируем размеры
+	if (clipRect != nullptr) {
+		finalQuad.w = clipRect->w;
+		finalQuad.h = clipRect->h;
+		// Если логика требует подмены координат на координаты клипа:
+		finalQuad.x = clipRect->x;
+		finalQuad.y = clipRect->y;
 	}
 
-	//Render to screenrenderQuad
-	SDL_RenderTextureRotated( Scada::gRenderer, mTexture, clipRect, renderQuad, angle, center, flipRender );
+	// 3. Отрисовываем, передавая адрес нашей локальной копии
+	SDL_RenderTextureRotated(Scada::gRenderer, mTexture, clipRect, &finalQuad, angle, center, flipRender);
 }
 
 float CTexture::getWidth()
@@ -283,13 +285,6 @@ void LoadImageTextureFromFile( std::string path, SDL_FRect *RectClipCoord )
 
 		SDL_GetTextureSize(tempTexture, &w, &h);
 
-	//SDL_GetTextureProperties(tempTexture);
-	//if (SDL_QueryTexture(tempTexture, NULL, NULL, &w, &h) != 0) {
-	//	std::cout << "SDL_QueryTexture failed: " << SDL_GetError() << std::endl;
-	//	SDL_DestroyTexture(tempTexture); // Освобождаем память, если не удалось получить размеры
-	//	return;
-	//}
-
 	if (RectClipCoord != nullptr)
 	{
 		RectClipCoord->w = w;
@@ -324,12 +319,6 @@ SDL_Texture *LoadFromRenderedText(std::string sstr, SDL_FRect &RectClipCoord)
 		return nullptr; // Важно: Выход из функции при ошибке
 	}
 
-	 //Получаем размеры текстуры (безопаснее, чем прямое обращение к textSurface->w/h)
-	//if (SDL_QueryTexture(tempTexture, NULL, NULL, &w, &h) != 0) {
-	//	std::cerr << "SDL_QueryTexture failed: " << SDL_GetError() << std::endl;
-	//	SDL_DestroyTexture(tempTexture);
-	//	return nullptr;
-	//}
 	SDL_GetTextureSize(tempTexture, &w, &h);
 	//Get rid of old surface
 		RectClipCoord.w = w;

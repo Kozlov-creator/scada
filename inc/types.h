@@ -51,3 +51,10 @@ struct RenderItem {
     RenderItem(std::string n, SceneElement* el)
     : name(n), element(el) {}
 };
+
+struct TextElement {
+    SDL_FRect rect;
+    std::string unitType;
+    float alarmHigh = 10.0f; // Порог срабатывания
+    bool isAlarmed = false;   // Текущее состояние аларма
+};

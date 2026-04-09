@@ -15,7 +15,7 @@ public:
     SDL_FRect* findElementAt(float x, float y, std::string& outName);
 
     // Доступ к текстовым конфигам
-    std::unordered_map<std::string, SDL_FRect>& getTextConfig() { return m_textConfig; }
+    std::unordered_map<std::string, TextElement>& getTextConfig() { return m_textConfig; }
 
     // Доступ к данным
     std::unordered_map<std::string, SceneElement>& getElements() { return m_elements; }
@@ -25,5 +25,5 @@ private:
     std::unordered_map<std::string, SceneElement> m_elements;
     std::vector<RenderItem> m_renderOrder;
     std::vector<std::string> m_unknownLines; // Для комментариев и NET: настроек
-    std::unordered_map<std::string, SDL_FRect> m_textConfig;
+    std::unordered_map<std::string, TextElement> m_textConfig;
 };

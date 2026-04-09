@@ -18,23 +18,6 @@
 
 std::vector<std::string> strv;
 
-//---------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------
-std::ifstream open_file(std::string file_name, std::string sData)
-{
-    std::ifstream in;
-
-    in.open(file_name);
-
-    if (in.is_open())
-    {
-        //Load data
-        while (getline(in,sData)) strv.push_back(sData);
-    }
-    else{std::cout<<file_name<<" not found"<<std::endl;}
-    in.close();
-    return in;
-}
 
 //Обновленная функция read_modbus//Теперь вместо того, чтобы складывать всё подряд в вектор, мы будем просто обновлять значения в карте по ключу-регистру.
 void read_modbus(const std::string& file_name)
@@ -52,7 +35,7 @@ void read_modbus(const std::string& file_name)
         std::istringstream iss(sline);
         std::string regNum, value;
 
-        if (std::getline(iss, regNum, ':') && std::getline(iss, value)) {
+        if (std::getline(iss, regNum, ',') && std::getline(iss, value, ',')) {
             // Очистка пробелов (Trim)
             auto trim = [](std::string& s) {
                 s.erase(0, s.find_first_not_of(" \t\r\n"));
@@ -70,12 +53,14 @@ void read_modbus(const std::string& file_name)
     // Обновляем глобальную карту под мьютексом
     if (Scada::modbus_mutex != nullptr) {
         SDL_LockMutex(Scada::modbus_mutex);
-        Scada::gModbusData = std::move(tempData);
+        for (auto const& [reg, val] : tempData) {
+            // Для Modbus тегами будут номера регистров "7802", "7805" и т.д.
+            Scada::gLiveTags[reg] = val;
+        }
         SDL_UnlockMutex(Scada::modbus_mutex);
     }
+
 }
-
-
 
 
 //=====================================================================================
@@ -87,13 +72,15 @@ std::string get_modbus_datetime() {
     SDL_LockMutex(Scada::modbus_mutex);
 
     // 1. Форматируем ДАТУ (Регистр 7793)
-    if (Scada::gModbusData.count("7793")) {
-        std::string val = Scada::gModbusData["7793"];
+    if (Scada::gLiveTags.count("7793")) {
+        std::string val = Scada::gLiveTags["7793"];
+        // Дополняем нулями слева до 6 символов (ЧЧММСС)
+        while (val.length() < 6) val.insert(0, "0");
+
         if (val.length() >= 6) {
             std::string day = val.substr(0, 2);
             std::string month = val.substr(2, 2);
             std::string year = val.substr(4, 2);
-
             // Превращаем номер месяца в название (если нужно)
             try {
                 int mIdx = std::stoi(month);
@@ -105,8 +92,8 @@ std::string get_modbus_datetime() {
     }
 
     // 2. Форматируем ВРЕМЯ (Регистр 7794)
-    if (Scada::gModbusData.count("7794")) {
-        std::string val = Scada::gModbusData["7794"];
+    if (Scada::gLiveTags.count("7794")) {
+        std::string val = Scada::gLiveTags["7794"];
         // Отрезаем дробную часть, если она есть (например, .00)
         size_t dot = val.find('.');
         if (dot != std::string::npos) val = val.substr(0, dot);
@@ -148,7 +135,7 @@ std::string get_display_time() {
         return ss.str();
     } else {
         // ЧИТАЕМ ИЗ MODBUS (ваш старый метод)
-        return get_modbus_datetime();
+         return get_modbus_datetime();
     }
 }
 

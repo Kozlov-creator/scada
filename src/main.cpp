@@ -16,6 +16,8 @@
 #include "globals.h"
 #include "functions.h"
 
+#include <cmath>
+
 using asio::ip::udp;
 
 asio::io_context io_context;
@@ -226,7 +228,7 @@ int main( int argc, char *args[] )
 
 							case SDLK_S:
 							{ // Нажмите 'S' для сохранения
-								save_layout_config(IMAGES_CONF);
+								App::scene.saveConfig(IMAGES_CONF);
 								std::cout << "Конфигурация сохранена вручную ('S')." << std::endl;
 								break;
 							}
@@ -243,7 +245,7 @@ int main( int argc, char *args[] )
 								// Опционально: если выходим из режима редактирования, можно сразу сохранить конфиг
 								else {
 									SDL_SetWindowTitle(Scada::gWindow, "SCADA [РАБОТА] - F2 для правок");
-									save_layout_config(IMAGES_CONF);
+									App::scene.saveConfig(IMAGES_CONF);
 									std::cout << "Режим правки ВЫКЛ, конфиг сохранен" << std::endl;
 								}
 								break;
@@ -315,11 +317,18 @@ int main( int argc, char *args[] )
 								if (std::abs(e.motion.xrel) > 2 || std::abs(e.motion.yrel) > 2) {
 								Scada::isDragging = true;
 							}
-							Scada::selectedRect->x = mousePos.x - clickOffset.x;
-							Scada::selectedRect->y = mousePos.y - clickOffset.y;
+							float gridSize = 2.0f; // Шаг сетки
+
+							// Вычисляем новую позицию с учетом смещения клика
+							float newX = mousePos.x - clickOffset.x;
+							float newY = mousePos.y - clickOffset.y;
+
+							// Применяем прилипание (математическое округление до ближайшего шага)
+							Scada::selectedRect->x = std::round(newX / gridSize) * gridSize;
+							Scada::selectedRect->y = std::round(newY / gridSize) * gridSize;
 							}
 						}
-					}
+					}//else if (e.type == SDL_EVENT_MOUSE_MOTION)
 
 					else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 					{
@@ -351,7 +360,19 @@ int main( int argc, char *args[] )
 
 							// 4. Логика захвата (Resize / Drag)
 							if (Scada::selectedRect) {
+								// Проверяем, является ли выбранный объект текстовым
+								// Допустим, у вас есть флаг или вы проверяете наличие имени в карте текста
+								bool isText = App::scene.getTextConfig().count(selectedObjectName);
+
 								float edgeSize = 15.0f;
+								// Если это ТЕКСТ — запрещаем ресайз, только перетаскивание
+								if (isText) {
+									Scada::isResizing = false;
+									clickOffset.x = mousePos.x - Scada::selectedRect->x;
+									clickOffset.y = mousePos.y - Scada::selectedRect->y;
+								}
+								// Если это КАРТИНКА (или другой объект) — оставляем логику ресайза
+								else {
 								bool isVertical = (Scada::selectedRect->h > Scada::selectedRect->w);
 								bool hitRight = (mousePos.x > (Scada::selectedRect->x + Scada::selectedRect->w - edgeSize));
 								bool hitBottom = (mousePos.y > (Scada::selectedRect->y + Scada::selectedRect->h - edgeSize));
@@ -363,16 +384,19 @@ int main( int argc, char *args[] )
 									// Смещение для корректного перетаскивания
 									clickOffset.x = mousePos.x - Scada::selectedRect->x;
 									clickOffset.y = mousePos.y - Scada::selectedRect->y;
+									}
 								}
 							}
 						}
-					}
+
+						}//else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+					}//	while( SDL_PollEvent( &e ) != 0 )
+
+			//}//while( !quit )
 
 
 
 
-
-				}
 
 				// --- ОБНОВЛЕНИЕ ГРАФИКИ ДАННЫМИ ---
 				SDL_LockMutex(Scada::data_mutex);

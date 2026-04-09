@@ -14,7 +14,7 @@
 
 #define FONT_TTF "/usr/share/fonts/TTF/Hack-BoldItalic.ttf" //Arch
 #define FILE_ALLERTMESSAGE "./logs/alert_message.txt"
-#define FILE_MODBUS "./logs/readModbus6.txt"
+#define FILE_MODBUS "/dev/shm/tags.csv"
 #define FILE_IMAGE "./coordinate/typeImage.txt"
 #define IMAGES_CONF "./coordinate/images.conf"
 
@@ -84,6 +84,16 @@ namespace Scada {
     inline std::string activeControlObject = ""; // Имя объекта (например, "pump_left")
 
     inline std::vector<std::string> vstrAlert;
+
+    // Добавьте в Scada глобальную карту подготовленных строк
+    inline std::unordered_map<std::string, std::string> gDisplayStrings;
+
+    // Единая точка для всех данных в системе
+    inline std::unordered_map<std::string, std::string> gLiveTags;
+
+    inline std::vector<std::string> gAlarmMessages;
+    inline float alarmScrollPos = 0.0f; // Текущая X-позиция текста
+    inline SDL_Mutex* alarm_mutex = SDL_CreateMutex();
 }
 
 //Scada::

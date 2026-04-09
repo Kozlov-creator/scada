@@ -1,8 +1,11 @@
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 #include <iostream>
+#include <filesystem>
+#include <algorithm>
 #include "globals.h"
+
+namespace fs = std::filesystem;
 
 bool SceneManager::loadConfig(const std::string& path) {
     m_elements.clear();
@@ -79,10 +82,20 @@ bool SceneManager::loadConfig(const std::string& path) {
                 float x, y, w, h;
                 if (iss >> x >> y >> w >> h) Scada::gTextAlert[name] = { x, y, w, h };
             }
-            else if (type == "TXT_MK:") {
-                float x, y, w, h;
-                if (iss >> x >> y >> w >> h) m_textConfig[name] = { x, y, w, h };
-            }
+            else if (type == "TXT_MB:" || type == "TXT_MK:") {
+               float x, y, w, h;
+               float alarm;
+               bool isAlarm;
+               std::string unit;
+
+               if (iss >> x >> y >> w >> h) {
+                   if (!(iss >> unit)) unit = "NONE"; // Если в файле нет юнита, пишем NONE
+                   if (!(iss >> alarm)) alarm = 1.0f; // Если в файле нет юнита, пишем NONE
+                    if (!(iss >> isAlarm)) isAlarm = false; // Если в файле нет юнита, пишем NONE
+                   // Заполняем структуру
+                   m_textConfig[name] = { {x, y, w, h}, unit, alarm, isAlarm };
+               }
+           }
 
             else {
                 Scada::gUnknownConfigLines.push_back(line);
@@ -115,11 +128,93 @@ SDL_FRect* SceneManager::findElementAt(float x, float y, std::string& outName) {
     }
 
     //Если не нашли, ищем в тексте
-    for (auto& [name, rect] : m_textConfig) {
-        if (SDL_PointInRectFloat(&p, &rect)) {
+    for (auto& [name, element] : m_textConfig) {
+        if (SDL_PointInRectFloat(&p, &element.rect)) {
             outName = name;
-            return &rect; // Возвращаем указатель на рект текста
+            return &element.rect; // Возвращаем указатель на рект текста
         }
     }
     return nullptr;
+}
+
+
+void SceneManager::saveConfig(const std::string& file_name) {
+
+    // Создаем бэкап перед началом записи
+    if (fs::exists(file_name)) {
+        std::string backup_name = file_name + ".bak";
+        try {
+            // copy_options::overwrite_existing позволяет обновлять старый бэкап
+            fs::copy(file_name, backup_name, fs::copy_options::overwrite_existing);
+            std::cout << "Бэкап создан: " << backup_name << std::endl;
+        } catch (const fs::filesystem_error& e) {
+            std::cerr << "Критическая ошибка при создании бэкапа: " << e.what() << std::endl;
+            return; // Прекращаем, чтобы не испортить оригинал
+        }
+    }
+
+
+    // Открываем файл для записи
+    std::ofstream file(file_name);
+    if (!file.is_open()) {
+        std::cerr << "Ошибка: не удалось открыть файл для сохранения: " << file_name << std::endl;
+        return;
+    }
+
+    //Сначала записываем всё, что мы не трогали (включая NET: настройки и комментарии)
+    for (const auto& unknownLine : Scada::gUnknownConfigLines) {
+        if (!unknownLine.empty()) {
+            file << unknownLine << "\n";
+        }
+    }
+
+    file << "\n# --- Auto-saved Dynamic Elements ---\n";
+
+    // Сохраняем актуальный EDIT_MODE
+    file << "EDIT_MODE: " << (Scada::editMode ? "1" : "0") << "\n\n";
+
+    // Сохраняем актуальный USE_SYSTEM_TIME
+    file << "USE_SYSTEM_TIME: " << (Scada::gUseSystemTime ? "1" : "0") << "\n\n";
+
+    // ЕДИНЫЙ ЦИКЛ ДЛЯ ВСЕХ ГРАФИЧЕСКИХ ОБЪЕКТОВ (теперь только IMG:)
+    for (auto const& [objName, element] : m_elements) {
+        file << "IMG: " << objName << ": "
+        << element.textureKey << " "
+        << element.rect.x << " "
+        << element.rect.y << " "
+        << element.rect.w << " "
+        << element.rect.h << " "
+        << element.layer << "\n";
+    }
+
+    file << "\n"; // Разделитель секций
+
+
+    // 2. Сохраняем текстовые зоны UDP (Микроконтроллер)
+    // Допустим, вы их храните отдельно или фильтруете по имени
+    for (auto const& [name, element] : m_textConfig) {
+        // Если имя начинается на UDP_, пишем как TXT_MK
+        if (name.find("UDP_") == 0) {
+            file << "TXT_MK: " << name << " "
+            << element.rect.x << " " << element.rect.y << " "
+            << element.rect.w << " " << element.rect.h << " "
+            << element.unitType << " " << element.alarmHigh << " " << element.isAlarmed << "\n";
+        }
+        // Если имя похоже на номер регистра (Modbus)
+        else {
+            file << "TXT_MB: " << name << " "
+            << element.rect.x << " " << element.rect.y << " "
+            << element.rect.w << " " << element.rect.h << " "
+            << element.unitType << " " << element.alarmHigh << " " << element.isAlarmed << "\n";
+        }
+    }
+
+    for (auto const& [textName, rect] : Scada::gTextAlert) {
+        file << "TXT_ALRT: " << textName << ": "
+        << (int)rect.x << " " << (int)rect.y << " "
+        << (int)rect.w << " " << (int)rect.h << "\n";
+    }
+
+    file.close();
+    std::cout << "Конфигурация успешно сохранена в формате IMG:" << std::endl;
 }

@@ -37,7 +37,7 @@ class CTexture
 
 		//Визуализирует текстуру в заданной точке Renders texture at given point
 		//void render( float x, float y, SDL_FRect *clipRect = nullptr, double angle = 0.0, SDL_FPoint *center = nullptr, SDL_FlipMode flipRender = SDL_FLIP_NONE );
-		void render( int xy =0, SDL_FRect *renderQuad = nullptr, SDL_FRect *clipRect = nullptr, double angle = 0.0, SDL_FPoint *center = nullptr, SDL_FlipMode flipRender = SDL_FLIP_NONE );
+		void render( int xy =0, const SDL_FRect *renderQuad = nullptr, SDL_FRect *clipRect = nullptr, double angle = 0.0, SDL_FPoint *center = nullptr, SDL_FlipMode flipRender = SDL_FLIP_NONE );
 
 		//Получает размеры изображения Gets image dimensions
 		float getWidth();
