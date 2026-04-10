@@ -84,8 +84,17 @@ int network_thread_func(void* ptr) {
 			}
 
 			if (!ec && len == sizeof(SensorData)) {
+				SensorData incoming;
+
+				memcpy(&incoming, recv_buf, sizeof(SensorData));
 				SDL_LockMutex(ctx->mutex);
-				memcpy(&Scada::shared_sensor_data, recv_buf, sizeof(SensorData));
+				// Проверяем: изменился ли timestamp от контроллера?
+				if (incoming.timestamp != Scada::lastMcuTimestamp) {
+					Scada::lastMcuTimestamp = incoming.timestamp;
+					Scada::lastUdpUpdateTimePC = SDL_GetTicks(); // Фиксируем время ПК
+				}
+				std::cout<< "incoming.timestamp = " << incoming.timestamp << "|| lastMcuTimestamp = " << Scada::lastMcuTimestamp << std::endl;
+				Scada::shared_sensor_data = incoming;
 				SDL_UnlockMutex(ctx->mutex);
 			}
 		} catch (...) { /* ошибка сети */   break; // При любой системной ошибке сокета — выход

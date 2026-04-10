@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <algorithm>
 #include "globals.h"
+#include <map>
+
 
 namespace fs = std::filesystem;
 
@@ -87,13 +89,15 @@ bool SceneManager::loadConfig(const std::string& path) {
                float alarm;
                bool isAlarm;
                std::string unit;
-
+               int prec = 1;
                if (iss >> x >> y >> w >> h) {
                    if (!(iss >> unit)) unit = "NONE"; // Если в файле нет юнита, пишем NONE
                    if (!(iss >> alarm)) alarm = 1.0f; // Если в файле нет юнита, пишем NONE
                     if (!(iss >> isAlarm)) isAlarm = false; // Если в файле нет юнита, пишем NONE
-                   // Заполняем структуру
-                   m_textConfig[name] = { {x, y, w, h}, unit, alarm, isAlarm };
+                    if (iss >> prec) {} // Если есть в файле, считываем точность
+                     // Заполняем структуру
+                    m_textConfig[name] = { {x, y, w, h}, unit, alarm, isAlarm, prec };
+
                }
            }
 
@@ -168,14 +172,61 @@ void SceneManager::saveConfig(const std::string& file_name) {
         }
     }
 
-    file << "\n# --- Auto-saved Dynamic Elements ---\n";
-
     // Сохраняем актуальный EDIT_MODE
     file << "EDIT_MODE: " << (Scada::editMode ? "1" : "0") << "\n\n";
-
     // Сохраняем актуальный USE_SYSTEM_TIME
     file << "USE_SYSTEM_TIME: " << (Scada::gUseSystemTime ? "1" : "0") << "\n\n";
 
+    file << std::fixed << std::setprecision(1); // Устанавливаем 1 знак для всех последующих float
+
+    // --- ГРУППИРОВКА И СОРТИРОВКА IMG ---
+    file << "# --- Images ---\n";
+    // Копируем в std::map для автоматической сортировки по имени (ключу)
+    std::map<std::string, SceneElement> sortedImages(m_elements.begin(), m_elements.end());
+    for (auto const& [objName, element] : sortedImages) {
+        file << "IMG: " << objName << ": " << element.textureKey << " "
+        << element.rect.x << " " << element.rect.y << " "
+        << element.rect.w << " " << element.rect.h << " "
+        << element.layer << "\n";
+    }
+    // --- ГРУППИРОВКА И СОРТИРОВКА ТЕКСТА (MK и MB отдельно) ---
+    std::map<std::string, TextElement> sortedMK;
+    std::map<std::string, TextElement> sortedMB;
+
+    for (auto const& [name, element] : m_textConfig) {
+        if (name.find("UDP_") == 0) sortedMK[name] = element;
+        else sortedMB[name] = element;
+    }
+
+    file << "\n# --- Modbus Tags ---\n";
+    for (auto const& [name, element] : sortedMB) {
+        file << "TXT_MB: " << name << " " << element.rect.x << " " << element.rect.y << " "
+        << element.rect.w << " " << element.rect.h << " "
+        << element.unitType << " " << element.alarmHigh << " "
+        << element.isAlarmed << " " << element.precision << "\n";
+    }
+
+    file << "\n# --- UDP Tags ---\n";
+    for (auto const& [name, element] : sortedMK) {
+        file << "TXT_MK: " << name << " " << element.rect.x << " " << element.rect.y << " "
+        << element.rect.w << " " << element.rect.h << " "
+        << element.unitType << " " << element.alarmHigh << " "
+        << element.isAlarmed << " " << element.precision << "\n";
+    }
+
+    // --- ГРУППИРОВКА И СОРТИРОВКА ALERTS ---
+    file << "\n# --- Alerts ---\n";
+    std::map<std::string, SDL_FRect> sortedAlerts(Scada::gTextAlert.begin(), Scada::gTextAlert.end());
+    for (auto const& [textName, rect] : sortedAlerts) {
+        file << "TXT_ALRT: " << textName << ": "
+        << (int)rect.x << " " << (int)rect.y << " "
+        << (int)rect.w << " " << (int)rect.h << "\n";
+    }
+
+    file.close();
+    std::cout << "Конфигурация успешно сохранена в формате IMG:" << std::endl;
+}
+    /*
     // ЕДИНЫЙ ЦИКЛ ДЛЯ ВСЕХ ГРАФИЧЕСКИХ ОБЪЕКТОВ (теперь только IMG:)
     for (auto const& [objName, element] : m_elements) {
         file << "IMG: " << objName << ": "
@@ -217,4 +268,4 @@ void SceneManager::saveConfig(const std::string& file_name) {
 
     file.close();
     std::cout << "Конфигурация успешно сохранена в формате IMG:" << std::endl;
-}
+}*/

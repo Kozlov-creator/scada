@@ -57,4 +57,11 @@ struct TextElement {
     std::string unitType;
     float alarmHigh = 10.0f; // Порог срабатывания
     bool isAlarmed = false;   // Текущее состояние аларма
+    int precision = 1; // По умолчанию 1 знак после запятой
+    bool isLinkLost = false; // Добавьте это поле
+};
+
+struct AlarmEntry {
+    std::string text;
+    SDL_Color color;
 };

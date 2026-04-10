@@ -25,27 +25,41 @@ void read_modbus(const std::string& file_name)
     std::ifstream openfile(file_name);
     if (!openfile.is_open()) return;
 
-    // Временная карта, чтобы минимизировать время блокировки мьютекса
+    // Временные карты, чтобы минимизировать время блокировки мьютекса
     std::unordered_map<std::string, std::string> tempData;
+    std::unordered_map<std::string, long> tempTime;
     std::string sline;
+
+    // Очистка пробелов (Trim)
+    auto trim = [](std::string& s) {
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        size_t last = s.find_last_not_of(" \t\r\n");
+        if (last != std::string::npos) s.erase(last + 1);
+    };
 
     while (std::getline(openfile, sline)) {
         if (sline.empty() || sline[0] == '#') continue;
 
         std::istringstream iss(sline);
-        std::string regNum, value;
+        std::string regNum, value, timeStr;
 
-        if (std::getline(iss, regNum, ',') && std::getline(iss, value, ',')) {
-            // Очистка пробелов (Trim)
-            auto trim = [](std::string& s) {
-                s.erase(0, s.find_first_not_of(" \t\r\n"));
-                s.erase(s.find_last_not_of(" \t\r\n") + 1);
-            };
-            trim(regNum);
-            trim(value);
+        // Читаем три колонки: Tag, Value, Timestamp
+        if (std::getline(iss, regNum, ',') &&
+            std::getline(iss, value, ',') &&
+            std::getline(iss, timeStr)) {
 
-            // Просто сохраняем в карту: ключ — регистр, значение — данные
+        trim(regNum);
+        trim(value);
+        trim(timeStr);
+
+        if (!regNum.empty()) {
             tempData[regNum] = value;
+            try {
+                tempTime[regNum] = std::stol(timeStr);
+            } catch (...) {
+                tempTime[regNum] = 0;
+            }
+        }
         }
     }
     openfile.close();
@@ -56,6 +70,8 @@ void read_modbus(const std::string& file_name)
         for (auto const& [reg, val] : tempData) {
             // Для Modbus тегами будут номера регистров "7802", "7805" и т.д.
             Scada::gLiveTags[reg] = val;
+            Scada::gTagTimestamps[reg] = tempTime[reg]; // Сохраняем время обновления
+
         }
         SDL_UnlockMutex(Scada::modbus_mutex);
     }

@@ -15,15 +15,29 @@
 #include <iomanip>
 #include <sstream>
 
-std::string format_timestamp(uint32_t ms) {
-    uint32_t seconds = ms / 1000;
-    uint32_t h = (seconds / 3600) % 24;
-    uint32_t m = (seconds / 60) % 60;
-    uint32_t s = seconds % 60;
+std::string format_timestamp(long long ms) {
+    // 1. Превращаем миллисекунды в секунды (time_t)
+    std::time_t seconds = static_cast<std::time_t>(ms / 1000);
+
+    // 2. Инициализируем настройки часового пояса (делается один раз, но можно и здесь)
+    static bool tz_initialized = false;
+    if (!tz_initialized) {
+        tzset();
+        tz_initialized = true;
+    }
+
+    // 3. Получаем локальное время
+    std::tm* now_tm = std::localtime(&seconds);
+
+    // Если localtime вернул nullptr (ошибка), возвращаем заглушку
+    if (!now_tm) return "[00:00:00] ";
 
     std::ostringstream oss;
-    oss << "[" << std::setfill('0') << std::setw(2) << h << ":"
-    << std::setw(2) << m << ":" << std::setw(2) << s << "] ";
+    oss << "["
+    << std::setfill('0') << std::setw(2) << now_tm->tm_hour << ":"
+    << std::setfill('0') << std::setw(2) << now_tm->tm_min << ":"
+    << std::setfill('0') << std::setw(2) << now_tm->tm_sec << "] ";
+
     return oss.str();
 }
 
@@ -123,10 +137,10 @@ void sync_all_tags() {
 
     // 1. Забираем данные из глобальной структуры SensorData (UDP)
     // Имена ключей ("UDP_Temp") должны совпадать с именами в вашем файле конфига
-    Scada::gLiveTags["UDP_Temp"] = std::to_string(Scada::shared_sensor_data.temperature);
-    Scada::gLiveTags["UDP_Hum"]  = std::to_string(Scada::shared_sensor_data.humidity);
-    Scada::gLiveTags["UDP_AccX"] = std::to_string(Scada::shared_sensor_data.accel_x);
-    Scada::gLiveTags["UDP_ID"]   = std::to_string(Scada::shared_sensor_data.packet_id);
+    Scada::gLiveTags[Tags::UDP_TEMP] = std::to_string(Scada::shared_sensor_data.temperature);
+    Scada::gLiveTags[Tags::UDP_HUM]  = std::to_string(Scada::shared_sensor_data.humidity);
+    Scada::gLiveTags[Tags::UDP_ACCEL] = std::to_string(Scada::shared_sensor_data.accel_x);
+    Scada::gLiveTags[Tags::UDP_ID]   = std::to_string(Scada::shared_sensor_data.packet_id);
 
     // 2. Копируем всё из Modbus
    // for (auto const& [reg, val] : Scada::gModbusData) {
@@ -145,15 +159,15 @@ bool is_blink_on() {
 
 //=========================================================================================
 //Логика «Сдвига» (Push & Shift)Когда происходит новое событие, мы добавляем его в начало списка, а самый старый аларм удаляем. Таким образом, новые алармы всегда будут на «линии 0», а старые будут «уходить» вверх (или вниз, смотря как назначите индексы).
-void add_to_alarm_log(std::string message) {
+void add_to_alarm_log(std::string message, SDL_Color color = {255, 0, 0, 255}) { // По умолчанию красный)
     SDL_LockMutex(Scada::alarm_mutex);
 
     // Вставляем новый аларм в начало (индекс 0)
-    Scada::gAlarmMessages.insert(Scada::gAlarmMessages.begin(), message);
+    Scada::gAlarmLog.insert(Scada::gAlarmLog.begin(), {message, color} );
 
     // Если алармов больше, чем зон в конфиге (у вас их 4) — удаляем лишний
-    if (Scada::gAlarmMessages.size() > 4) {
-        Scada::gAlarmMessages.pop_back();
+    if (Scada::gAlarmLog.size() > 4) {
+        Scada::gAlarmLog.pop_back();
     }
 
     SDL_UnlockMutex(Scada::alarm_mutex);
@@ -165,7 +179,7 @@ void render_alarm_log() {
       CTexture tempCTexture;
     SDL_LockMutex(Scada::alarm_mutex);
 
-    for (int i = 0; i < Scada::gAlarmMessages.size(); ++i) {
+    for (int i = 0; i < Scada::gAlarmLog.size(); ++i) {
         std::string zoneName = "alert_line_" + std::to_string(i);
 
         if (Scada::gTextAlert.count(zoneName)) {
@@ -177,44 +191,112 @@ void render_alarm_log() {
                 continue; // Пропускаем отрисовку этого кадра (эффект исчезновения)
             }
 
-            SDL_Color alarmColor = {255, 0, 0, 255}; // Красный
+            // Используем цвет, который был сохранен при создании записи
+            SDL_Color textColor = Scada::gAlarmLog[i].color;
 
-            tempCTexture.loadFromRenderedText(Scada::gAlarmMessages[i], alarmColor);
+            tempCTexture.loadFromRenderedText(Scada::gAlarmLog[i].text, textColor);
             tempCTexture.render(0, &rect);
         }
     }
 
     SDL_UnlockMutex(Scada::alarm_mutex);
 }
+//==================================================================================================
 //=================================================================================================
 // Подготовка данных для вывода. Добавил обновление вектора строк Scada::vstrValueMC данными из сетевой структуры. Это нужно делать до начала цикла отрисовки или внутри него, защитив мьютексом.
 void update_interface_values() {
      CTexture tempCTexture;
      SDL_Color sdlcolor = {255, 255, 255, 255}; // Белый для текста
+     long long currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+         std::chrono::system_clock::now().time_since_epoch()).count();;
+          uint32_t currentTicks = SDL_GetTicks();
+     uint32_t timeout = 5000; // 5 секунд
 
      sync_all_tags(); // Сначала объединяем
+     std::ostringstream oss;
+
+     // --- 1. ПРОВЕРКА КАНАЛА MODBUS ---
+     bool modbusOk = false;
+     if (!Scada::gTagTimestamps.empty()) {
+         auto it = Scada::gTagTimestamps.begin();
+         if (currentTime - it->second < timeout) modbusOk = true;
+     }
+
+     if (modbusOk && Scada::isModbusLinkLost) {
+         Scada::isModbusLinkLost = false;
+         add_to_alarm_log(format_timestamp(currentTime) + "СВЯЗЬ ВОССТАНОВЛЕНА: MODBUS (FILE)", {0, 255, 0, 255});
+     } else if (!modbusOk && !Scada::isModbusLinkLost && !Scada::gTagTimestamps.empty()) {
+         Scada::isModbusLinkLost = true;
+         add_to_alarm_log(format_timestamp(currentTime) + "СВЯЗЬ ПОТЕРЯНА: MODBUS (FILE)", {200, 100, 0, 255});
+     }
+
+     // --- 2. ПРОВЕРКА КАНАЛА UDP ---
+     bool udpOk = (currentTicks - Scada::lastUdpUpdateTimePC < timeout);
+
+     if (udpOk && Scada::isUdpLinkLost) {
+         Scada::isUdpLinkLost = false;
+         add_to_alarm_log(format_timestamp(currentTime) + "СВЯЗЬ ВОССТАНОВЛЕНА: UDP (ETHERNET)", {0, 255, 0, 255});
+     } else if (!udpOk && !Scada::isUdpLinkLost) {
+         Scada::isUdpLinkLost = true;
+         add_to_alarm_log(format_timestamp(currentTime) + "СВЯЗЬ ПОТЕРЯНА: UDP (ETHERNET)", {200, 100, 0, 255});
+     }
 
      // Теперь просто бежим по конфигу и ищем совпадения имен
      for (auto& [name, element] : App::scene.getTextConfig()) {
-          std::string displayStr = "0";
-         if (Scada::gLiveTags.count(name)) {
-             displayStr = Scada::gLiveTags[name];
+          std::string displayStr = "NONE";
+          bool isLinkOk = false;
 
-             // Алармы (теперь работают для обоих контроллеров одинаково)
-             float val = std::stof(displayStr);
+          // Определяем, к какому каналу относится тег
+          if (name.find("UDP_") == 0) {
+              isLinkOk = udpOk; // Тег зависит от статуса UDP
+            } else {
+              isLinkOk = modbusOk; // Остальные (цифровые) от Modbus
+          }
 
-             if (name == "7078") { if (val == 1.0f ){ displayStr = "УЧЁТ";} else displayStr = "НЕ УЧЁТ";}
+           if (isLinkOk)  {
+
+            //  Получаем сырую строку из данных
+             std::string rawVal = Scada::gLiveTags[name];
+             float val = 0.0f;
+
+             element.isLinkLost = false; // Сбрасываем флаг
+
+ //std::cout << "DEBUG: parsing tag " << name << " value: [" << rawVal << "]" << std::endl;             displayStr = Scada::gLiveTags[name];
+
+            // ЗАЩИТА: Пытаемся безопасно превратить строку в число
+            try {
+                if (!rawVal.empty() && rawVal != "NONE") {
+                    val = std::stof(rawVal);
+                }
+            } catch (const std::exception& e) {
+                // Если в строке мусор или текст, stof выдаст ошибку.
+                // Мы ее ловим здесь, чтобы программа не "падала".
+                val = -666.0f;
+            }
+
+            displayStr = rawVal;
+
+             // Форматируем число с заданной точностью
+             oss.str("");   // Очищает содержимое буфера (строку)
+             oss.clear();   // Сбрасывает флаги состояния (на случай, если был EOF или ошибка)
+             oss << std::fixed << std::setprecision(element.precision) << val;
+
+
+             if (name == "7078" || name == "7106" || name == "7134") { oss.str(""); oss.clear(); if (val == 1.0f ) { oss << "УЧЁТ";} else oss << "НЕ УЧЁТ";}
+
+
 
              if (val > element.alarmHigh && !element.isAlarmed) {// Только в момент перехода в аварию
                  element.isAlarmed = true;
-
                  // Формируем строку: [Время] Имя: Значение > Порог
-                 std::string timeStr = format_timestamp(Scada::shared_sensor_data.timestamp);
+                 std::string timeStr = format_timestamp(currentTime);
                  std::string msg = timeStr + name + ": " + displayStr + " > " + std::to_string(element.alarmHigh);
 
-                 add_to_alarm_log(msg); // Функция с insert(begin), которую мы писали ранее
+                 add_to_alarm_log(msg, {255, 0, 0, 255}); // Красный
              }
               element.isAlarmed = (val > element.alarmHigh);
+
+              displayStr = oss.str();
 
              // 2. Добавляем суффикс на основе unitType
              if (element.unitType == "M3H")       displayStr += " m3/h";
@@ -223,16 +305,23 @@ void update_interface_values() {
              else if (element.unitType == "TH") displayStr += " t/h";
              else if (element.unitType == "PRES") displayStr += " MPa";
              else if (element.unitType == "DENS") displayStr += " kg/m3";
+             else if (element.unitType == "WATER") displayStr += " %";
              else if (element.unitType == "NONE") displayStr += "      "; //чтобы можно было перемещать
 
+         }
+         else {
+             // --- СВЯЗЬ ПОТЕРЯНА ---
+             displayStr = "NONE";
+             element.isAlarmed = false; // Убираем аларм по значению, так как данных нет
+             element.isLinkLost = true; // Для потери связи (Серый или Оранжевый)
          }
 
          if (element.isAlarmed) {
              sdlcolor = {255, 0, 0, 255}; // Красный при аварии
          } else { sdlcolor = {255, 255, 255, 255};} // Белый для текста
 
-
-         // 3. Рендерим, обращаясь к .rect внутри структуры
+         if (displayStr == "NONE") {sdlcolor =  {100, 100, 100, 255};} // Тускло-серый
+           // 3. Рендерим, обращаясь к .rect внутри структуры
          tempCTexture.loadFromRenderedText(displayStr, sdlcolor);
          tempCTexture.render(0, &element.rect, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
 
@@ -258,40 +347,7 @@ void update_interface_values() {
              SDL_RenderRect(Scada::gRenderer, &element.rect);
          }
      }
-    /* for (auto& [objName, element] : App::scene.getTextConfig()) {
-        // 1. Получаем значение из данных (Modbus или UDP)
-        std::string displayStr = "0";
-        if (Scada::gLiveTags.count(objName)) {
-            float val = std::stof(Scada::gLiveTags[objName]); // Преобразуем строку в число
 
-            // Проверка порога
-            if (val > element.alarmHigh) {
-                if (!element.isAlarmed) {
-                    element.isAlarmed = true;
-                    // Здесь можно записать в лог: "Авария: Тег такой-то превышен!"
-                }
-            } else {
-                element.isAlarmed = false;
-            }
-            displayStr = Scada::gModbusData[objName];
-        }   else if (objName == "UDP_temp") {  displayStr = std::to_string(Scada::shared_sensor_data.temperature);  }
-            else if (objName == "UDP_hum") { displayStr = std::to_string(Scada::shared_sensor_data.humidity);  }
-            else if (objName == "UDP_acel") { displayStr = std::to_string(Scada::shared_sensor_data.accel_x);   }
-            else if (objName == "UDP_ID") { displayStr = std::to_string(Scada::shared_sensor_data.packet_id); }
-
-
-        // 2. Добавляем суффикс на основе unitType
-        if (element.unitType == "M3H")       displayStr += " m3/h";
-        else if (element.unitType == "TEMP") displayStr += " C";
-        else if (element.unitType == "PERC") displayStr += " %";
-
-
-
-
-    }
-
-    SDL_UnlockMutex(Scada::modbus_mutex);
-    SDL_UnlockMutex(Scada::data_mutex);*/
 }
 
 //========================================================================================================

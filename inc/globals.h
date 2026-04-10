@@ -25,6 +25,13 @@ const int SCREEN_HEIGHT = 1080;
 //Number of data integers
 const int TOTAL_DATA = 10;
 
+namespace Tags {
+    const std::string UDP_TEMP = "UDP_temp";
+    const std::string UDP_HUM  = "UDP_hum";
+    const std::string UDP_ID   = "UDP_ID";
+    const std::string UDP_ACCEL   = "UDP_acel";
+}
+
 namespace App {
     inline SceneManager scene;      // Управление объектами
     inline SDL_Renderer* renderer;  // Глобальный рендерер
@@ -91,9 +98,18 @@ namespace Scada {
     // Единая точка для всех данных в системе
     inline std::unordered_map<std::string, std::string> gLiveTags;
 
-    inline std::vector<std::string> gAlarmMessages;
+    inline std::vector<AlarmEntry> gAlarmLog;
     inline float alarmScrollPos = 0.0f; // Текущая X-позиция текста
     inline SDL_Mutex* alarm_mutex = SDL_CreateMutex();
+    // Хранит время последнего успешного получения тега (в миллисекундах)
+    inline std::unordered_map<std::string, long> gTagTimestamps;
+
+    inline bool isModbusLinkLost = false; // Глобальный статус для файла
+    inline bool isUdpLinkLost = false;    // Новый флаг для UDP
+
+    inline uint32_t lastMcuTimestamp = 0;      // Тот, что пришел в структуре
+    inline uint32_t lastUdpUpdateTimePC = 0;   // Время ПК (SDL_GetTicks)
+
 }
 
 //Scada::
