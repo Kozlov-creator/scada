@@ -1,20 +1,18 @@
-#include <SDL3/SDL.h>
 #include <stdio.h>
-#include <string>
-#include <vector>
 #include <fstream>
 #include <iostream>
 #include <sstream> // Для std::istringstream
 #include <algorithm>
-#include <unordered_map>
-
 #include <iomanip>
 #include <ctime>
 #include <chrono>
-
 #include "globals.h"
 #include "functions.h"
-#include "SceneManager.h"
+//#include "SceneManager.h"
+//#include <unordered_map>
+//#include <string>
+//#include <vector>
+//#include <SDL3/SDL.h>
 
 std::vector<std::string> strv;
 

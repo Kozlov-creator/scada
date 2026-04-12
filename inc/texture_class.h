@@ -12,16 +12,10 @@ class CTexture
 		~CTexture();
 
 		//Загружает изображение по указанному пути Loads image at specified path
-		bool loadFromFile( std::string path );
-
-		bool loadSVGAuto( std::string path );
-
-		bool loadTextureFromFile( std::string path);
-
+		bool loadFromFile( SDL_Renderer* renderer, const std::string& path );
 
 		//Создает изображение из строки шрифта Creates image from font string
-		bool loadFromRenderedText( std::string textureText, SDL_Color textColor );
-
+		bool loadFromRenderedText( SDL_Renderer* renderer, const std::string& textureText, SDL_Color textColor, TTF_Font* Font_ttf );
 
 		//Освобождает текстуру Deallocates texture
 		void freeTexture();
@@ -40,9 +34,9 @@ class CTexture
 		void render( int xy =0, const SDL_FRect *renderQuad = nullptr, SDL_FRect *clipRect = nullptr, double angle = 0.0, SDL_FPoint *center = nullptr, SDL_FlipMode flipRender = SDL_FLIP_NONE );
 
 		//Получает размеры изображения Gets image dimensions
-		float getWidth();
-		float getHeight();
-		SDL_Texture *getTexture();
+		float getWidth() const;
+		float getHeight() const;
+		SDL_Texture *getTexture() const;
 		void setXY(float x, float y);
 
 	private:
@@ -54,17 +48,6 @@ class CTexture
 		float mHeight;
 		float mX;
 		float mY;
+
+		bool createFromSurface(SDL_Renderer* renderer, SDL_Surface* surface);
 };
-
-
-class ProgressBar {
-public:
-	SDL_FRect rect;      // Позиция и размер {x, y, w, h}
-	float minVal = 0.0f;
-	float maxVal = 40.0f;
-
-	ProgressBar(float x, float y, float w, float h);
-
-	void draw(SDL_Renderer* renderer, float currentValue);
-};
-

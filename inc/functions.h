@@ -18,19 +18,15 @@ int read_alert(std::string);
 void desctop1();
 void desctop2();
 
-
-SDL_Texture *LoadFromRenderedText (std::string, SDL_FRect&);
-
-//void LoadFromRenderedText (std::string, SDL_Rect&, SDL_Texture&);
-
-void LoadImageTextureFromFile( std::string , SDL_FRect* );
-
 //Запускает SDL2 и создает окно Starts up SDL2 and creates window
 bool init();
 
 //Загрузка медиа данных Loads media
+bool loadFonts(TTF_Font*& font, const std::string& path, int size);
+bool initCustomCursor(SDL_Cursor*& , const std::string& );
+bool loadSceneAssets();
 bool loadMedia();
 
 //Освобождает медиа данные и отключает SDL2 Frees media and shuts down SDL2
-void close();
+void cleanup();
 

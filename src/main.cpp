@@ -1,22 +1,19 @@
 #include <map>
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
-
 #include <stdio.h>
-#include <string>
 #include <sstream>
-#include <vector>
 #include <fstream>
 #include <iostream>
-
-#include <texture_class.h>
-#include <asio.hpp>
-
 #include "globals.h"
 #include "functions.h"
-
 #include <cmath>
+
+//#include <vector>
+//#include <SDL3_image/SDL_image.h>
+//#include <SDL3/SDL.h>
+//#include <texture_class.h>
+//#include <asio.hpp>
+//#include <string>
 
 using asio::ip::udp;
 
@@ -443,7 +440,7 @@ int main( int argc, char *args[] )
 	}
 
 	//Free resources and close SDL
-	close();
+	cleanup();
 
 	return 0;
 }

@@ -1,29 +1,22 @@
-#include <unordered_map>
 #include <map>
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
-#include <SDL3_ttf/SDL_ttf.h>
-
 #include <stdio.h>
-#include <string>
 #include <sstream>
-#include <vector>
 #include <fstream>
 #include <iostream>
-
-#include <texture_class.h>
 #include <unistd.h>
-
 #include <algorithm> // для std::clamp
 
 #include "globals.h"
 #include "functions.h"
 
+//#include <texture_class.h>
+//#include <SDL3/SDL.h>
+//#include <SDL3_image/SDL_image.h>
+//#include <unordered_map>
+//#include <vector>
+//#include <string>
 
 SDL_Cursor *mousecursor = NULL;
-
-TTF_Font *Font_ttf;
-
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -49,75 +42,8 @@ void CTexture::setXY(float x, float y)
 	mY = y;
 }
 
-bool CTexture::loadTextureFromFile( std::string path )
+bool CTexture::loadFromFile( SDL_Renderer* renderer, const std::string& path )
 {
-	//Избавьтесь от ранее существовавшей текстуры
-	freeTexture();
-
-	//Конечная текстура
-	SDL_Texture *newTexture = nullptr;
-
-	newTexture = IMG_LoadTexture(Scada::gRenderer,path.c_str());
-
-	if(newTexture == nullptr)
-	{
-		std::cout<<"Can't load: "<<SDL_GetError()<<std::endl;
-	}
-
-	//Успешное возращение
-	mTexture = newTexture;
-	return mTexture != nullptr;
-}
-
-bool CTexture::loadSVGAuto( std::string path )
-{
-	freeTexture();
-
-	// 1. Получаем текущий размер области отрисовки (окна)
-	int windowW, windowH;
-	if (!SDL_GetRenderOutputSize(Scada::gRenderer, &windowW, &windowH)) {
-		std::cout << "Error getting render size: " << SDL_GetError() << std::endl;
-		return false;
-	}
-
-	// 2. Открываем файл через IOStream (стандарт SDL3)
-	SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
-	if (!io) return false;
-
-	// 3. Растеризуем SVG сразу в размер окна
-	// Теперь картинка будет идеально четкой, без "мыла"
-	SDL_Surface* loadedSurface = IMG_LoadSizedSVG_IO(io, windowW, windowH);
-	SDL_CloseIO(io);
-
-	if (!loadedSurface) {
-		std::cout << "SVG Load Error: " << SDL_GetError() << std::endl;
-		return false;
-	}
-
-	// 4. Создаем текстуру
-	mTexture = SDL_CreateTextureFromSurface(Scada::gRenderer, loadedSurface);
-
-	if (mTexture) {
-		mWidth = loadedSurface->w;
-		mHeight = loadedSurface->h;
-
-		// Включаем режим смешивания для поддержки прозрачности SVG
-		SDL_SetTextureBlendMode(mTexture, SDL_BLENDMODE_BLEND);
-	}
-
-	SDL_DestroySurface(loadedSurface);
-	return mTexture != nullptr;
-}
-
-
-bool CTexture::loadFromFile( std::string path )
-{
-	//Избавьтесь от ранее существовавшей текстуры
-	freeTexture();
-
-	//Конечная текстура
-	SDL_Texture *newTexture = nullptr;
-
 	//Загрузить изображение по указанному пути
 	SDL_Surface *loadedSurface = IMG_Load( path.c_str() );
 	if( loadedSurface == nullptr )
@@ -125,66 +51,29 @@ bool CTexture::loadFromFile( std::string path )
 		std::cout<< "Unable to load image "<< path.c_str()<<" SDL_image Error: " << SDL_GetError() <<std::endl;
 		return false;
 	}
-		// УДАЛЯЕМ SDL_SetSurfaceColorKey!
-		// SVG сам управляет прозрачностью через альфа-канал.
-
-		//Create texture from surface pixels
-        newTexture = SDL_CreateTextureFromSurface( Scada::gRenderer, loadedSurface );
-		if( newTexture == nullptr )
-		{
-			std::cout<< "Unable to create texture from "<<path.c_str() <<"SDL Error: "<< SDL_GetError() <<std::endl;
-		}
-		else
-		{
-			//Get image dimensions
-			mWidth = loadedSurface->w;
-			mHeight = loadedSurface->h;
-
-			// Включаем поддержку прозрачности для текстуры
-			SDL_SetTextureBlendMode(newTexture, SDL_BLENDMODE_BLEND);
-		}
 
 	//Избавьтесь от старой загруженной поверхности
-	SDL_DestroySurface( loadedSurface );
-	//Return success
-	mTexture = newTexture;
-	return mTexture != nullptr;
+	bool success = createFromSurface(renderer, loadedSurface);
+	SDL_DestroySurface(loadedSurface);
+	return success;
 
 }
 
-bool CTexture::loadFromRenderedText( std::string textureText, SDL_Color textColor )
+bool CTexture::loadFromRenderedText( SDL_Renderer* renderer, const std::string& textureText, SDL_Color textColor, TTF_Font* Font_ttf )
 {
-	//Избавьтесь от ранее существовавшей текстуры
-	freeTexture();
-
 	//Render text surface
 	SDL_Surface *textSurface = TTF_RenderText_Solid( Font_ttf, textureText.c_str(), textureText.size(), textColor );
-	if( textSurface != nullptr )
-	{
-		//Create texture from surface pixels
-        mTexture = SDL_CreateTextureFromSurface( Scada::gRenderer, textSurface );
-		if( mTexture == nullptr )
-		{
-			std::cout<< "Unable to create texture from rendered text! SDL Error: "<< SDL_GetError() <<std::endl;
-		}
-		else
-		{
-			//Get image dimensions
-			mWidth = textSurface->w;
-			mHeight = textSurface->h;
-		}
-
-		//Get rid of old surface
-		SDL_DestroySurface( textSurface );
-	}
-	else
+	if( textSurface == nullptr )
 	{
 		std::cout<< "Unable to render text surface! SDL_ttf Error: "<< SDL_GetError() <<std::endl;
+		return false;
 	}
-
 	
-	//Return success
-	return mTexture != nullptr;
+	//Избавьтесь от старой загруженной поверхности
+	bool success = createFromSurface(renderer, textSurface);
+	SDL_DestroySurface(textSurface);
+	return success;
+
 }
 
 
@@ -252,80 +141,34 @@ void CTexture::render( int xy, const SDL_FRect *renderQuad, SDL_FRect *clipRect,
 	SDL_RenderTextureRotated(Scada::gRenderer, mTexture, clipRect, &finalQuad, angle, center, flipRender);
 }
 
-float CTexture::getWidth()
+float CTexture::getWidth() const
 {
 	return mWidth;
 }
 
-float CTexture::getHeight()
+float CTexture::getHeight() const
 {
 	return mHeight;
 }
 
-SDL_Texture* CTexture::getTexture()
+SDL_Texture* CTexture::getTexture() const
 {
 	return mTexture;
 }
 
-
-//Функция загрузки изображений в текстуру//////////////////////////////////////////
-void LoadImageTextureFromFile( std::string path, SDL_FRect *RectClipCoord )
-{
-	//Конечная текстура The final texture
-	SDL_Texture *tempTexture = nullptr;
-	float w, h;
-
-	tempTexture = IMG_LoadTexture(Scada::gRenderer,path.c_str());
-	if(tempTexture == nullptr)
-	{
-		std::cout<<"Can't load: "<<SDL_GetError()<<std::endl;
+// В private:
+bool CTexture::createFromSurface(SDL_Renderer* renderer, SDL_Surface* surface) {
+	//Избавьтесь от ранее существовавшей текстуры
+	freeTexture();
+	mTexture = SDL_CreateTextureFromSurface(renderer, surface);
+	if (mTexture != nullptr) {
+		mWidth = (float)surface->w;
+		mHeight = (float)surface->h;
+		SDL_SetTextureBlendMode(mTexture, SDL_BLENDMODE_BLEND);
 	}
-
-	// Получаем размеры текстуры
-
-		SDL_GetTextureSize(tempTexture, &w, &h);
-
-	if (RectClipCoord != nullptr)
-	{
-		RectClipCoord->w = w;
-		RectClipCoord->h = h;
-	}
-
-
+	return mTexture != nullptr;
 }
 
-//Функция создание изображения из текста///////////////////////////////////////////////////////////
-SDL_Texture *LoadFromRenderedText(std::string sstr, SDL_FRect &RectClipCoord)
-{
-
-	SDL_Color textColor = {0, 0, 0, 0xFF};
-	SDL_Surface *textSurface = nullptr;
-	SDL_Texture *tempTexture = nullptr;
-	float w, h;
-
-	// Render text surface
-	textSurface = TTF_RenderText_Solid(Font_ttf, sstr.c_str(), sstr.size(), textColor);
-	if (textSurface == nullptr) {
-		std::cout<<"Unable to render text surface! SDL_ttf Error: "<< SDL_GetError()<<std::endl;
-		return nullptr; // Важно: Выход из функции при ошибке
-	}
-
-	// Create texture from surface pixels
-	tempTexture = SDL_CreateTextureFromSurface(Scada::gRenderer, textSurface);
-	SDL_DestroySurface(textSurface);
-	if (tempTexture == nullptr) {
-		std::cout<<"Unable to create texture from rendered text! SDL Error: "<< SDL_GetError()<<std::endl;
-		SDL_DestroySurface(textSurface); // Освобождаем поверхность, если создание текстуры не удалось
-		return nullptr; // Важно: Выход из функции при ошибке
-	}
-
-	SDL_GetTextureSize(tempTexture, &w, &h);
-	//Get rid of old surface
-		RectClipCoord.w = w;
-		RectClipCoord.h = h;
-
-	return tempTexture;
-}
 
 //Функция инициализации SDL/////////////////////////////////////////////////////////
 bool init()
@@ -374,15 +217,7 @@ bool init()
 				//Initialize renderer color
 				SDL_SetRenderDrawColor( Scada::gRenderer, 129, 191, 254, 0xFF );
 
-				//Initialize PNG loading
-				//int imgFlags = IMG_INIT_PNG;
-				//if( !( IMG_Init( imgFlags ) & imgFlags ) )
-				//{
-				//	printf( "SDL_image could not initialize! SDL_image Error: %s\n", SDL_GetError() );
-				//	success = false;
-				//}
-
-				 //Initialize SDL_ttf
+				//Initialize SDL_ttf
 				if( TTF_Init() == -1 )
 				{
 					std::cout << "SDL_ttf could not initialize! SDL_ttf Error: " << SDL_GetError() << std::endl;
@@ -402,7 +237,7 @@ bool LoadTexture(const std::string& name, const std::string& path) {
 
 	// 2. Используем метод вашего класса CTexture
 	// Он сам создаст SDL_Texture, заполнит mWidth/mHeight и удалит surface
-	if (Scada::gSharedTextures[name].loadFromFile(path)) {
+	if (Scada::gSharedTextures[name].loadFromFile(Scada::gRenderer, path)) {
 		return true;
 	}
 
@@ -411,107 +246,125 @@ bool LoadTexture(const std::string& name, const std::string& path) {
 	return false;
 }
 
-
-//Функция загрузка изображений /////////////////////////////////////////////////////////////
-bool loadMedia()
-{
-	SDL_Surface *surfcursor = NULL;
-	//Text rendering color
-	SDL_Color textColor = { 0, 0, 0, 0xFF };
-	
-	//Loading success flag
-	bool success = true;
-
-	// Загрузка шрифта
-	Font_ttf = TTF_OpenFont( FONT_TTF, 20 );
-	if( Font_ttf == NULL )
-	{
-		std::cout << "Failed to load font! SDL_ttf Error: " << SDL_GetError() << std::endl;
-		success = false;
+//============================================================================================
+//Загрузка системных ресурсов (Шрифты)
+bool loadFonts(TTF_Font*& font, const std::string& path, int size) {
+	// 1. Очищаем старый шрифт, если он там был
+	if (font != nullptr) {
+		TTF_CloseFont(font);
 	}
 
-	 // Настройка курсора
-	surfcursor = IMG_Load("./image/cursor53x66.png");
-	if(surfcursor == NULL)
-	{
-		std::cout << "Can't load: " << SDL_GetError() << std::endl;
-	}
-	mousecursor= SDL_CreateColorCursor(surfcursor, 1 ,1);
+	// 2. Загружаем новый прямо в переданную переменную
+	font = TTF_OpenFont(path.c_str(), size);
 
-	if (mousecursor == NULL)
-	{
-		std::cout << "Can't load: " << SDL_GetError() << std::endl;
+	if (font == nullptr) {
+		std::cout << "Ошибка загрузки: " << SDL_GetError() << std::endl;
+		return false;
 	}
-	SDL_SetCursor(mousecursor);
+	return true;
+}
+//============================================================================================
+//Настройка интерфейса (Курсор)
+bool initCustomCursor(SDL_Cursor*& cursor, const std::string& path) {
+	SDL_Surface* surf = IMG_Load(path.c_str());
+	if (!surf) {
+		std::cerr << "Can't load cursor image: " << SDL_GetError() << std::endl;
+		return false;
+	}
 
-	//Предварительная загрузка данных (Алерты) Считывание данных об изображения из файла//////////////////////////////////
+	// Если старый курсор был — удаляем его из памяти
+	if (cursor != nullptr) {
+		SDL_DestroyCursor(cursor);// Обязательно освобождаем!
+	}
+	// Создаем аппаратный курсор (данные копируются в видеокарту)
+	cursor = SDL_CreateColorCursor(surf, 1, 1);
+
+	// ОЧИСТКА: Удаляем поверхность из оперативной памяти
+	// Она больше не нужна, так как курсор уже в видеопамяти
+	SDL_DestroySurface(surf);
+
+	if (!cursor) {
+		std::cerr << "CreateCursor Error: " << SDL_GetError() << std::endl;
+		return false;
+	}
+
+	SDL_SetCursor(cursor);
+	return true;
+}
+//============================================================================================
+//Загрузка игровых ассетов (Текстуры и сцена) Здесь мы отделяем логику парсинга от логики загрузки.
+bool loadSceneAssets() {
 	read_alert(FILE_ALLERTMESSAGE);
+	Scada::vstrValueMC.resize(4, "");
 
+	if (!App::scene.loadConfig(IMAGES_CONF)) return false;
 
-	// ИНИЦИАЛИЗАЦИЯ КЭША ТЕКСТУР Резервируем место под максимальное кол-во элементов (например, 100)
-	Scada::vstrValueMC.resize(4, ""); // Создает 4 пустые строки
-
-	App::scene.loadConfig(IMAGES_CONF); //Функция парсера (Безопасная) retcoord.cpp
-
-	//Загрузка изображений
-	// Загрузка всех графических объектов (теперь только SVG)
 	for (auto& [objName, element] : App::scene.getElements()) {
-
 		std::string texName = element.textureKey;
 
-		// 1. ЗАГРУЗКА ТЕКСТУРЫ (если еще не в памяти)
+		// Если текстуры нет в кэше — грузим
 		if (Scada::gSharedTextures.find(texName) == Scada::gSharedTextures.end()) {
-			// Теперь путь всегда к .svg
 			std::string path = "./image/" + texName + ".svg";
-
-			if (!Scada::gSharedTextures[texName].loadFromFile(path)) {
-				std::cout << "Ошибка загрузки файла: " << path << std::endl;
-				success = false;
-				continue; // Пропускаем объект, если файл не найден
+			if (!Scada::gSharedTextures[texName].loadFromFile(Scada::gRenderer, path)) {
+				return false;
 			}
 		}
 
-		// 2. ОПРЕДЕЛЕНИЕ РАЗМЕРОВ
-		// Если в конфиге размеры 0 (новый объект), берем родной размер SVG
+		// Авто-размер, если не задан в конфиге
 		if (element.rect.w <= 0.0f || element.rect.h <= 0.0f) {
-			element.rect.w = (float)Scada::gSharedTextures[texName].getWidth();
-			element.rect.h = (float)Scada::gSharedTextures[texName].getHeight();
-
-			std::cout << "Объект [" << objName << "] инициализирован размером SVG: "
-			<< element.rect.w << "x" << element.rect.h << std::endl;
-		}
-		else {
-			// Если размеры > 0, значит они кастомные (из конфига) — не трогаем их
-			std::cout << "Объект [" << objName << "] загружен с сохраненным размером: "
-			<< element.rect.w << "x" << element.rect.h << std::endl;
+			element.rect.w = Scada::gSharedTextures[texName].getWidth();
+			element.rect.h = Scada::gSharedTextures[texName].getHeight();
 		}
 	}
 
-	// 3. ОБНОВЛЯЕМ ОЧЕРЕДЬ ОТРИСОВКИ (Z-Order)
-	// После того как все элементы загружены, один раз строим список слоев
 	App::scene.refreshRenderOrder();
+	return true;
+}
 
 
+//===========================================================================================
+//Функция загрузка изображений /////////////////////////////////////////////////////////////
+bool loadMedia()
+{
+	bool success = true;
+
+	// Загружаем шрифт прямо в глобальную переменную Scada
+	if (!loadFonts(Scada::gMainFont, FONT_TTF, 20)) {
+		success = false;
+	}
+
+	// Загружаем курсор
+	if (!initCustomCursor(Scada::gMouseCursor, "./image/cursor53x66.png")) {
+		success = false;
+	}
+
+	// Загружаем всё остальное (алерты, конфиги, SVG)
+	if (!loadSceneAssets()) {
+		success = false;
+	}
 
 	return success;
 }
 
 //Function close//////////////////////////////////////////////////////////////////////
-void close()
+void cleanup()
 {
 	//Free global font
-	TTF_CloseFont( Font_ttf );
-	Font_ttf = NULL;
+	if (Scada::gMainFont) {
+		TTF_CloseFont(Scada::gMainFont);
+		Scada::gMainFont = nullptr;
+	}
+
 	SDL_DestroyCursor(mousecursor);
 	//Destroy window	
 	SDL_DestroyRenderer( Scada::gRenderer );
 	SDL_DestroyWindow( Scada::gWindow );
+
 	Scada::gWindow = NULL;
 	Scada::gRenderer = NULL;
 
 	//Quit SDL subsystems
 	TTF_Quit();
-	//IMG_Quit();
 	SDL_Quit();
 }
 

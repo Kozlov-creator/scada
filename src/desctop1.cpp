@@ -1,19 +1,18 @@
 #include <map>
 #include <fstream>
 #include <iostream>
-#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
-#include <vector>
-#include <texture_class.h>
-#include <string>
 #include <chrono>
-#include <unordered_map>
-
 #include "globals.h"
 #include "functions.h"
-
 #include <iomanip>
 #include <sstream>
+
+//#include <SDL3/SDL.h>
+//#include <vector>
+//#include <texture_class.h>
+//#include <string>
+//#include <unordered_map>
 
 std::string format_timestamp(long long ms) {
     // 1. Превращаем миллисекунды в секунды (time_t)
@@ -88,7 +87,7 @@ void DrawControlPopup() {
 
     // Заголовок окна
     std::string title = "УПРАВЛЕНИЕ: " + Scada::activeControlObject;
-    tempCTexture.loadFromRenderedText(title, {255, 255, 255, 255});
+    tempCTexture.loadFromRenderedText(Scada::gRenderer, title, {255, 255, 255, 255}, Scada::gMainFont);
     SDL_FRect titleRect = { Scada::controlWindowRect.x + 20, Scada::controlWindowRect.y + 20, 400, 40 };
     tempCTexture.render(0, &titleRect, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
 
@@ -96,14 +95,14 @@ void DrawControlPopup() {
     SDL_FRect btnOn = { Scada::controlWindowRect.x + 50, Scada::controlWindowRect.y + 150, 150, 80 };
     SDL_SetRenderDrawColor(Scada::gRenderer, 0, 150, 0, 255);
     SDL_RenderFillRect(Scada::gRenderer, &btnOn);
-    tempCTexture.loadFromRenderedText("ПУСК", {255, 255, 255, 255});
+    tempCTexture.loadFromRenderedText(Scada::gRenderer, "ПУСК", {255, 255, 255, 255}, Scada::gMainFont);
     tempCTexture.render(0, &btnOn, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
 
     // Кнопка "ВЫКЛЮЧИТЬ" (Красная)
     SDL_FRect btnOff = { Scada::controlWindowRect.x + 300, Scada::controlWindowRect.y + 150, 150, 80 };
     SDL_SetRenderDrawColor(Scada::gRenderer, 150, 0, 0, 255);
     SDL_RenderFillRect(Scada::gRenderer, &btnOff);
-    tempCTexture.loadFromRenderedText("СТОП", {255, 255, 255, 255});
+    tempCTexture.loadFromRenderedText(Scada::gRenderer, "СТОП", {255, 255, 255, 255}, Scada::gMainFont);
     tempCTexture.render(0, &btnOff, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
 
     // Кнопка "ЗАКРЫТЬ" (Маленький крестик в углу)
@@ -194,7 +193,7 @@ void render_alarm_log() {
             // Используем цвет, который был сохранен при создании записи
             SDL_Color textColor = Scada::gAlarmLog[i].color;
 
-            tempCTexture.loadFromRenderedText(Scada::gAlarmLog[i].text, textColor);
+            tempCTexture.loadFromRenderedText(Scada::gRenderer, Scada::gAlarmLog[i].text, textColor, Scada::gMainFont);
             tempCTexture.render(0, &rect);
         }
     }
@@ -322,7 +321,7 @@ void update_interface_values() {
 
          if (displayStr == "NONE") {sdlcolor =  {100, 100, 100, 255};} // Тускло-серый
            // 3. Рендерим, обращаясь к .rect внутри структуры
-         tempCTexture.loadFromRenderedText(displayStr, sdlcolor);
+         tempCTexture.loadFromRenderedText(Scada::gRenderer, displayStr, sdlcolor, Scada::gMainFont);
          tempCTexture.render(0, &element.rect, nullptr, 0.0, nullptr, SDL_FLIP_NONE);
 
          // НОВАЯ ЛОГИКА: Отображение имени тега при перемещении
@@ -331,7 +330,7 @@ void update_interface_values() {
              SDL_Color yellow = {255, 255, 0, 180}; // Желтый полупрозрачный
              render_grid();
              // Загружаем имя тега (например, "7802" или "UDP_Temp")
-             tempCTexture.loadFromRenderedText("[" + name + "]", yellow);
+             tempCTexture.loadFromRenderedText(Scada::gRenderer, "[" + name + "]", yellow, Scada::gMainFont);
 
              // Рисуем имя чуть выше самого объекта
              SDL_FRect nameRect = {
@@ -389,7 +388,7 @@ void desctop1()
    std::string currentTime = get_display_time();
 
    //  Загружаем в текстуру
-   tempCTexture.loadFromRenderedText(currentTime, sdlcolor);
+   tempCTexture.loadFromRenderedText(Scada::gRenderer, currentTime, sdlcolor, Scada::gMainFont);
    //  Создаем прямоугольник отрисовки
    // x = 10, y = 10, ширину и высоту берем из самой текстуры
    SDL_FRect textRect = { 10.0f, 10.0f, (float)tempCTexture.getWidth(), (float)tempCTexture.getHeight() };
@@ -402,7 +401,7 @@ void desctop1()
    /* for (size_t i = 0; i < Scada::vstrAlert.size(); i++) {
         std::string key = "alert_line_" + std::to_string(i);
         if (Scada::gTextAlert.count(key)) {
-            tempCTexture.loadFromRenderedText(Scada::vstrAlert[i], sdlcolor);
+            tempCTexture.loadFromRenderedText(Scada::gRenderer, Scada::vstrAlert[i], sdlcolor, Scada::gMainFont);
             tempCTexture.render(0, &Scada::gTextAlert[key], nullptr, 0.0, nullptr, SDL_FLIP_NONE);
         }
     }*/

@@ -1,16 +1,14 @@
 #pragma once
-#include "types.h"
+#include <SDL3_ttf/SDL_ttf.h>
 #include "SceneManager.h"
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
-
-// Подключаем структуры
 #include "texture_class.h"
-
-
+#include "progress_bar.h"
+//#include <string>
+//#include <vector>
+//#include <unordered_map>
+//#include <SDL3/SDL.h>
+//#include "types.h"
 
 #define FONT_TTF "/usr/share/fonts/TTF/Hack-BoldItalic.ttf" //Arch
 #define FILE_ALLERTMESSAGE "./logs/alert_message.txt"
@@ -109,6 +107,10 @@ namespace Scada {
 
     inline uint32_t lastMcuTimestamp = 0;      // Тот, что пришел в структуре
     inline uint32_t lastUdpUpdateTimePC = 0;   // Время ПК (SDL_GetTicks)
+
+    // Системные ресурсы
+    inline TTF_Font* gMainFont = nullptr;
+    inline SDL_Cursor* gMouseCursor = nullptr;
 
 }
 
